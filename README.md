@@ -13,7 +13,11 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | 2 | Cuentas y transacciones | ✅ |
 | 3 | Categorías y presupuestos | ✅ |
 | 4 | Dashboard y gráficos | ✅ |
-| 5 | PWA, exportación, despliegue y keep-alive | ⏳ |
+| 5 | PWA, exportación, despliegue y keep-alive | ✅ |
+
+**Inicio rápido:** [1. Supabase](#1-crear-el-proyecto-en-supabase) → [2. Auth](#2-configurar-auth) →
+[3. Captcha](#3-activar-el-captcha-cloudflare-turnstile) → [4. Local](#4-ejecutar-en-local) →
+[6. Desplegar](#6-desplegar-en-github-pages).
 
 ---
 
@@ -24,6 +28,11 @@ supabase/migrations/
   0001_schema.sql               Tablas, índices, constraints, RLS, triggers, eliminar cuenta
   0002_categories_budgets.sql   Reglas de categorías/presupuestos y RPC spending_by_category
   0003_dashboard.sql            RPC monthly_totals (ingresos/gastos por mes)
+  0004_keepalive.sql            RPC keepalive() para el workflow anti-pausa
+.github/workflows/
+  deploy.yml             Build + publicación en GitHub Pages en cada push a main
+  keepalive.yml          Ping a Supabase cada 3 días
+public/                  manifest.webmanifest, sw.js (service worker), íconos
 scripts/
   lib.mjs                Utilidades (cliente admin y por usuario) — SOLO local
   seed.mjs               Crea 3 usuarios de prueba con datos distintos
@@ -31,9 +40,11 @@ scripts/
 src/
   types.ts               Tipos de las tablas (actualizar si cambia el SQL)
   lib/                   supabase (cliente), format (CLP), dates (meses), errors,
-                         events (recarga automática), icons (emoji de categorías)
+                         events (recarga automática), icons (emoji de categorías),
+                         theme (claro/oscuro), pwa (service worker, instalar), chartTheme
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
-  data/                  Única capa que habla con Supabase (accounts, categories, transactions)
+  data/                  Única capa que habla con Supabase (accounts, categories,
+                         transactions, budgets, dashboard, export)
   context/               RefData (cuentas y categorías globales), Month (mes seleccionado)
   auth/AuthProvider.tsx  Sesión global + detección de recuperación de contraseña
   components/            UI base, Modal (<dialog>), Feedback (confirmar/toast),
@@ -43,7 +54,7 @@ src/
   features/categories/   Categorías: crear, editar color/ícono, archivar, eliminar
   features/budgets/      Presupuestos mensuales, barra de progreso, alertas
   features/dashboard/    KPIs, dona de gastos, barras 12 meses (Recharts, carga diferida)
-  pages/                 Auth, Inicio, Ajustes, Privacidad
+  pages/                 Auth, Ajustes (tema, instalar, exportar, contraseña, eliminar), Privacidad
 ```
 
 ### Cómo fluyen los datos
@@ -78,10 +89,23 @@ Decisiones clave:
 - **FKs compuestas `(id, user_id)`**: aunque alguien conozca el UUID de la cuenta de otro usuario,
   la base de datos rechaza la referencia. Esto se suma a RLS (defensa en profundidad).
 - **Etiquetas** como `text[]` con índice GIN: simple y suficiente para filtrar.
-- **Etapa 2** (metas, recurrentes, cuotas, importación de cartolas, patrimonio): se agregarán como
-  nuevas migraciones `0002_...sql` siguiendo el mismo patrón (`user_id default auth.uid()`, RLS de
-  4 políticas, FKs compuestas). Para la importación con detección de duplicados se agregará una columna
-  `import_hash` con índice único parcial en `transactions`.
+- **Totales en la BD**: los agregados (gasto por categoría, totales mensuales) son funciones SQL
+  `security invoker`, así respetan RLS y no hay que traer miles de filas al navegador.
+
+### Etapa 2: cómo está preparada la arquitectura
+
+Cada funcionalidad nueva = **una migración nueva** (`0005_...sql`) + un archivo en `src/data/` +
+una carpeta en `src/features/` + una línea en `NAV` (`AppShell.tsx`) y en `App.tsx`. Siempre con el
+mismo patrón: `user_id uuid not null default auth.uid()`, RLS con las 4 políticas, FKs compuestas
+`(id, user_id)` hacia cuentas/categorías y una prueba en `test-isolation.mjs`.
+
+| Funcionalidad | Diseño previsto |
+|---|---|
+| Metas de ahorro | tabla `goals` (nombre, monto objetivo, fecha, `account_id` opcional); el avance se calcula desde el saldo de la cuenta o con aportes = transferencias hacia la cuenta de ahorro. |
+| Transacciones recurrentes | tabla `recurring_rules` (plantilla de transacción + frecuencia + próxima fecha). Sin servidor propio: al abrir la app se generan las pendientes con una RPC `materialize_recurring()` idempotente (o un cron de `pg_cron` en Supabase). Las generadas llevan `recurring_id` en `transactions`. |
+| Deudas y compras en cuotas | tabla `installment_plans` (monto total, n° de cuotas, cuenta tarjeta, primera fecha); cada cuota es una `transaction` con `installment_plan_id` y `installment_no`, para que el presupuesto del mes vea solo la cuota. |
+| Importar cartolas CSV | parser en el navegador por banco (`src/features/import/parsers/`); columna `import_hash` (fecha+monto+descripción normalizada+cuenta) con índice único parcial `(user_id, import_hash) where import_hash is not null` y `upsert … ignoreDuplicates` para descartar duplicados. |
+| Patrimonio neto en el tiempo | RPC `net_worth_by_month()` que reconstruye el saldo de todas las cuentas a fin de cada mes a partir de saldos iniciales + transacciones (no requiere tabla nueva); se grafica con la misma base de `IncomeExpenseChart`. |
 
 ## Funcionalidades
 
@@ -119,6 +143,15 @@ presupuestos del mes anterior. Las transferencias no cuentan como gasto.
   "Ver como tabla".
 - Últimos 5 movimientos.
 
+**Ajustes** (`/#/ajustes`): tema (Sistema / Claro / Oscuro), instalar la app, **exportar mis datos**
+(movimientos en CSV con `;` y UTF-8 para Excel, o respaldo completo en JSON), cambiar contraseña,
+eliminar la cuenta y todos los datos, y enlace a Privacidad.
+
+**PWA**: instalable en Android, iOS y escritorio. El service worker (`public/sw.js`, sin
+dependencias) guarda solo la app (HTML/JS/CSS/íconos) para que abra rápido y sin conexión; los datos
+financieros **nunca** se guardan en el caché: siempre vienen de Supabase. Sin internet la app abre,
+pero muestra "Sin conexión" al cargar datos.
+
 Los colores de ingresos/gastos (`src/lib/chartTheme.ts`) se validaron para contraste en claro y
 oscuro. Verde/rojo queda en el límite de distinción para daltonismo, por eso nunca se usan solos:
 leyenda, orden fijo, separación entre barras, tooltip y vista de tabla. Los totales los calcula la
@@ -131,7 +164,11 @@ base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no
 - Al registrarse, el trigger `on_auth_user_created` crea el perfil y las categorías por defecto.
 - `delete_my_account()` (RPC) borra el usuario actual; todo lo demás se elimina en cascada.
 - El frontend solo usa la **anon key**. La **service_role** solo se usa en `scripts/` en tu equipo
-  y está en `scripts/.env.scripts` (ignorado por git). **Nunca** la pongas en variables `VITE_*`.
+  y está en `scripts/.env.scripts` (ignorado por git). **Nunca** la pongas en variables `VITE_*`
+  ni en los secrets de GitHub.
+- Las funciones SQL invocables: `delete_my_account`, `spending_by_category`, `monthly_totals`
+  (solo `authenticated`) y `keepalive` (también `anon`, no lee datos).
+- El service worker no cachea ninguna respuesta de Supabase.
 
 ---
 
@@ -143,8 +180,9 @@ base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no
 2. Ve a **SQL Editor** → **New query**, pega y ejecuta **en orden** cada archivo de
    `supabase/migrations/` (`0001_schema.sql`, luego `0002_categories_budgets.sql`, …).
    Cada archivo se ejecuta una sola vez; las fases siguientes agregan archivos nuevos.
-3. En **Project Settings → API** copia la **Project URL**, la **anon public key** y la
-   **service_role key** (esta última solo para scripts locales).
+3. En **Project Settings → API Keys** copia la **Project URL**, la **anon public key** (o la
+   *publishable key*, que también sirve) y la **service_role / secret key** (esta última solo para
+   scripts locales).
 
 ### 2. Configurar Auth
 
@@ -203,7 +241,7 @@ Lo que verifica `test:isolation` (cada punto es una prueba automática):
 - [ ] `INSERT` con `user_id` de otro usuario es rechazado; cambiar `user_id` en un `UPDATE` es rechazado.
 - [ ] No se puede crear una transacción en la cuenta de otro, usar su categoría, transferir hacia su cuenta, presupuestar su categoría ni mover una transacción propia a su cuenta (FKs compuestas).
 - [ ] Integridad: categoría de tipo incorrecto, monto 0, transferencia a la misma cuenta y cupo en cuenta que no es tarjeta son rechazados.
-- [ ] Sin sesión (`anon`) no se lee ninguna tabla ni se puede llamar a `delete_my_account`.
+- [ ] Sin sesión (`anon`) no se lee ninguna tabla ni se puede llamar a `delete_my_account`; solo `keepalive`, que devuelve `"ok"`.
 - [ ] `spending_by_category` y `monthly_totals` solo suman datos propios, excluyen transferencias, y `anon` no puede llamarlas.
 - [ ] No se puede presupuestar una categoría de ingreso ni una categoría ajena (ni con `upsert`).
 - [ ] No se puede cambiar el tipo de una categoría con movimientos; editar/borrar categorías ajenas afecta 0 filas.
@@ -211,11 +249,47 @@ Lo que verifica `test:isolation` (cada punto es una prueba automática):
 
 La contraseña de los usuarios de prueba está en `scripts/lib.mjs`.
 
-### 6. Desplegar
+### 6. Desplegar en GitHub Pages
 
-*(Se completa en la Fase 5: workflow de GitHub Pages con `VITE_BASE=/finanzas-personales/`
-y workflow keep-alive cada 3 días.)*
+> GitHub Pages gratis requiere que el repositorio sea **público** (o un plan pago). El código no
+> contiene secretos: la URL y la anon key son públicas por diseño y la seguridad la da RLS.
 
-La app usa **HashRouter** (`/#/ajustes`), por lo que funciona en GitHub Pages sin `404.html`.
-Los enlaces de los correos usan el flujo **PKCE** (`?code=` en la query), compatible con el hash.
-Nota: el enlace del correo de recuperación debe abrirse en el mismo navegador donde se solicitó.
+1. En GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. **Settings → Secrets and variables → Actions → New repository secret**, crea:
+   - `VITE_SUPABASE_URL` = `https://TU-PROYECTO.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = la anon / publishable key
+   - `VITE_TURNSTILE_SITE_KEY` = la site key de Turnstile (opcional)
+3. Haz push a `main` (o **Actions → Deploy a GitHub Pages → Run workflow**). El workflow compila con
+   `VITE_BASE=/<nombre-del-repo>/` y publica en `https://<usuario>.github.io/<nombre-del-repo>/`.
+4. Vuelve a Supabase **Authentication → URL Configuration** y verifica que *Site URL* y
+   *Redirect URLs* tengan exactamente esa URL (con `/` final). En Turnstile agrega el dominio
+   `<usuario>.github.io`.
+
+Enrutamiento: la app usa **HashRouter** (`/#/ajustes`), así que GitHub Pages siempre sirve
+`index.html` y no hace falta `404.html` ni rewrites. Los enlaces de los correos usan el flujo
+**PKCE** (`?code=` en la query), compatible con el hash. El enlace de recuperación de contraseña
+debe abrirse en el mismo navegador donde se solicitó.
+
+**Alternativa: Vercel.** Importa el repo, framework *Vite*, y define las mismas variables
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TURNSTILE_SITE_KEY` y `VITE_BASE=/`. Agrega la
+URL de Vercel en Supabase (Site URL / Redirect URLs) y en Turnstile.
+
+### 7. Keep-alive (evitar la pausa del plan gratuito)
+
+Supabase pausa los proyectos gratuitos tras ~7 días sin actividad. El workflow
+`.github/workflows/keepalive.yml` llama a `rpc/keepalive` cada 3 días con los mismos secrets del
+paso 6 (requiere la migración `0004_keepalive.sql`). Pruébalo una vez a mano en
+**Actions → Keep-alive Supabase → Run workflow**.
+
+Ojo: GitHub desactiva los workflows programados de repos **sin commits en 60 días** y avisa por
+correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commit.
+
+## Mantenimiento
+
+- **Cambiar el esquema:** nunca edites una migración ya aplicada; crea `supabase/migrations/000N_...sql`,
+  ejecútala en el SQL Editor, actualiza `src/types.ts` y agrega su prueba en `scripts/test-isolation.mjs`.
+- **Agregar una pantalla:** archivo en `src/features/<x>/`, ruta en `App.tsx`, entrada en `NAV`.
+- **Forzar que los usuarios reciban una versión nueva del service worker:** sube `VERSION` en `public/sw.js`
+  (normalmente no hace falta: el HTML se pide siempre a la red primero).
+- **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run preview` ·
+  `npm run seed` · `npm run test:isolation`.

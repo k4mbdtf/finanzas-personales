@@ -1,0 +1,34 @@
+# Consulta liviana a Supabase cada 3 días para que el proyecto del plan
+# gratuito no se pause por inactividad. Llama a la función keepalive()
+# (migración 0004), que no lee datos. Usa los mismos secrets del deploy.
+name: Keep-alive Supabase
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *' # 12:00 UTC cada 3 días
+  workflow_dispatch: # permite ejecutarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping a Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Faltan los secrets VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          # Solo el header apikey: sirve con la anon key (JWT) y con la publishable key.
+          response=$(curl -fsS --retry 3 --retry-delay 10 -X POST "$SUPABASE_URL/rest/v1/rpc/keepalive" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "Respuesta: $response"
+          [ "$response" = '"ok"' ] || { echo "::error::Respuesta inesperada"; exit 1; }

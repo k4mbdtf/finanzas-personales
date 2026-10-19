@@ -3,7 +3,7 @@
 // Ingresos/gastos validados con el validador de paleta (dataviz): pasan contraste y
 // brillo; la separación para daltonismo verde/rojo queda en la banda 6–8, por lo que
 // SIEMPRE van con codificación secundaria: leyenda, orden fijo, separación y tabla.
-import { useEffect, useState } from 'react'
+import { useIsDark } from './theme'
 
 const LIGHT = {
   surface: '#ffffff', // = bg-white de las tarjetas
@@ -26,16 +26,7 @@ const DARK: typeof LIGHT = {
 
 export type ChartTheme = typeof LIGHT
 
-const query = () => window.matchMedia('(prefers-color-scheme: dark)')
-
-/** Tema según la preferencia del sistema (la Fase 5 suma el selector manual). */
+/** Colores según el tema activo de la app (sistema o elegido en Ajustes). */
 export function useChartTheme(): ChartTheme {
-  const [dark, setDark] = useState(() => query().matches)
-  useEffect(() => {
-    const mq = query()
-    const on = (e: MediaQueryListEvent) => setDark(e.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return dark ? DARK : LIGHT
+  return useIsDark() ? DARK : LIGHT
 }

@@ -94,6 +94,8 @@ console.log('\n7. Sin sesión (anon)')
   }
   const { error } = await anon.rpc('delete_my_account')
   check(!!error, 'anon no puede ejecutar delete_my_account', error?.message)
+  const { data: ka, error: eKa } = await anon.rpc('keepalive')
+  check(!eKa && ka === 'ok', 'anon puede llamar a keepalive y solo recibe "ok"', eKa?.message)
 }
 
 console.log('\n7b. Fase 3: categorías, presupuestos y RPC de gasto')

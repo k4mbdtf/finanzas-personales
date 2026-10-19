@@ -3,10 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Finanzas personales: cuentas, movimientos, presupuestos y resumen mensual." />
     <meta name="theme-color" content="#0f766e" />
     <title>Mis Finanzas</title>
+
+    <!-- PWA (las rutas son relativas para respetar el base path de GitHub Pages) -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Finanzas" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- Aplica el tema antes de pintar para evitar el parpadeo claro/oscuro.
+         Debe coincidir con src/lib/theme.ts -->
+    <script>
+      try {
+        var t = localStorage.getItem('finanzas.theme') || 'system'
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+      } catch (e) {}
+    </script>
   </head>
   <body>
+    <noscript>Esta aplicación necesita JavaScript.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
