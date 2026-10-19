@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Modo oscuro: por ahora sigue la preferencia del sistema (prefers-color-scheme).
+   En la Fase 5 se agrega un selector manual (clase .dark en <html>). */
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+}

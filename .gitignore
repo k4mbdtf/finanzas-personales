@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.local
+
+# Variables de entorno: NUNCA se suben
+.env
+.env.*
+!.env.example
+!.env.scripts.example
+scripts/.env.scripts
+
+.DS_Store
+.vscode/
+*.log
+.claude/
