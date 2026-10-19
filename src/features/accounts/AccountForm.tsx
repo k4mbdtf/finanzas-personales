@@ -5,6 +5,7 @@ import { createAccount, deleteAccount, updateAccount } from '@/data/accounts'
 import { AppError } from '@/lib/errors'
 import { ACCOUNT_TYPES, COLORS } from '@/lib/icons'
 import { AmountInput } from '@/components/AmountInput'
+import { ColorPicker } from '@/components/Pickers'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { Alert, Button, Field } from '@/components/ui'
 import type { Account, AccountType } from '@/types'
@@ -125,23 +126,7 @@ export function AccountForm({ account, onDone }: { account?: Account; onDone: ()
         </>
       )}
 
-      <fieldset>
-        <legend className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">Color</legend>
-        <div className="flex flex-wrap gap-2">
-          {COLORS.map((c) => (
-            <label key={c} className="cursor-pointer">
-              <input type="radio" name="account-color" className="peer sr-only" checked={color === c} onChange={() => setColor(c)} />
-              <span
-                className="grid size-9 place-items-center rounded-full text-sm text-white ring-offset-2 peer-checked:ring-2 peer-checked:ring-slate-900 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-600 dark:ring-offset-slate-800 dark:peer-checked:ring-white"
-                style={{ backgroundColor: c }}
-              >
-                {color === c ? '✓' : ''}
-                <span className="sr-only">Color {c}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <ColorPicker value={color} onChange={setColor} />
 
       {account && (
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">

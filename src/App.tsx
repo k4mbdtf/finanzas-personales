@@ -15,6 +15,8 @@ import SettingsPage from '@/pages/SettingsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
 import AccountsPage from '@/features/accounts/AccountsPage'
 import TransactionsPage from '@/features/transactions/TransactionsPage'
+import BudgetsPage from '@/features/budgets/BudgetsPage'
+import CategoriesPage from '@/features/categories/CategoriesPage'
 
 /** Solo usuarios con sesión. Si viene de un enlace de recuperación, lo manda a /restablecer. */
 function RequireAuth() {
@@ -64,6 +66,8 @@ export default function App() {
               <Route index element={<HomePage />} />
               <Route path="/movimientos" element={<TransactionsPage />} />
               <Route path="/cuentas" element={<AccountsPage />} />
+              <Route path="/presupuestos" element={<BudgetsPage />} />
+              <Route path="/categorias" element={<CategoriesPage />} />
               <Route path="/ajustes" element={<SettingsPage />} />
             </Route>
           </Route>

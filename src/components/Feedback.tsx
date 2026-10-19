@@ -6,7 +6,13 @@ import { Modal } from './Modal'
 import { Button } from './ui'
 
 type ConfirmOptions = { title: string; message: ReactNode; confirmLabel?: string; danger?: boolean }
-type ToastKind = 'success' | 'error'
+type ToastKind = 'success' | 'warning' | 'error'
+
+const TOAST_STYLE: Record<ToastKind, { icon: string; cls: string }> = {
+  success: { icon: '✓', cls: 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' },
+  warning: { icon: '⚠️', cls: 'bg-amber-400 text-amber-950' },
+  error: { icon: '⛔', cls: 'bg-red-700 text-white' },
+}
 type Ctx = {
   confirm: (o: ConfirmOptions) => Promise<boolean>
   toast: (msg: string, kind?: ToastKind) => void
@@ -32,7 +38,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const toast = useCallback((msg: string, kind: ToastKind = 'success') => {
     const id = Date.now() + Math.random()
     setToasts((t) => [...t, { id, msg, kind }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500)
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'success' ? 3500 : 6000)
   }, [])
 
   return (
@@ -53,11 +59,10 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            role={t.kind === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${
-              t.kind === 'error' ? 'bg-red-700 text-white' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'}`}
+            role={t.kind === 'success' ? 'status' : 'alert'}
+            className={`pointer-events-auto max-w-md rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${TOAST_STYLE[t.kind].cls}`}
           >
-            {t.kind === 'error' ? '⚠️ ' : '✓ '}{t.msg}
+            {TOAST_STYLE[t.kind].icon} {t.msg}
           </div>
         ))}
       </div>

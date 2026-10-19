@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/auth/AuthProvider'
 import { ChangePasswordForm } from '@/components/ChangePasswordForm'
@@ -17,6 +17,12 @@ export default function SettingsPage() {
         <h2 className="mb-1 text-lg font-semibold">Mi cuenta</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">{session?.user.email}</p>
       </Card>
+
+      <Link to="/categorias"
+        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 font-semibold shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800">
+        <span><span aria-hidden>🏷️ </span>Categorías</span>
+        <span className="text-sm font-normal text-slate-500 dark:text-slate-400">Colores, íconos y personalizadas ›</span>
+      </Link>
 
       <Card>
         <h2 className="mb-4 text-lg font-semibold">Cambiar contraseña</h2>

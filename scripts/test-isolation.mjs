@@ -96,6 +96,41 @@ console.log('\n7. Sin sesión (anon)')
   check(!!error, 'anon no puede ejecutar delete_my_account', error?.message)
 }
 
+console.log('\n7b. Fase 3: categorías, presupuestos y RPC de gasto')
+{
+  const range = { p_from: '2000-01-01', p_to: '2100-12-31' }
+  const { data: sp, error } = await A.rpc('spending_by_category', range)
+  check(!error, 'Ana puede llamar a spending_by_category', error?.message)
+  const anaCatIds = new Set((await A.from('categories').select('id')).data.map((c) => c.id))
+  check(sp.every((r) => r.category_id === null || anaCatIds.has(r.category_id)), 'spending_by_category solo devuelve categorías de Ana')
+  const { data: anaExp } = await A.from('transactions').select('amount').eq('type', 'expense')
+  const expected = anaExp.reduce((s, t) => s + Number(t.amount), 0)
+  const got = sp.reduce((s, r) => s + Number(r.total), 0)
+  check(got === expected, `El gasto total del RPC coincide con los gastos de Ana (${got} = ${expected})`)
+
+  const { error: eAnon } = await (await import('@supabase/supabase-js'))
+    .createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    .rpc('spending_by_category', range)
+  check(!!eAnon, 'anon no puede llamar a spending_by_category', eAnon?.message)
+
+  const incomeCat = (await A.from('categories').select('id').eq('kind', 'income').limit(1)).data[0].id
+  const r1 = await A.from('budgets').insert({ category_id: incomeCat, month: '2030-02-01', amount: 1000 })
+  check(!!r1.error, 'No se puede presupuestar una categoría de ingreso', r1.error?.message)
+
+  const r2 = await A.from('budgets').upsert(
+    { category_id: bCat, month: '2030-03-01', amount: 1000 }, { onConflict: 'user_id,category_id,month' })
+  check(!!r2.error, 'UPSERT de presupuesto sobre categoría de Bruno es rechazado', r2.error?.message)
+
+  const usedCat = (await A.from('transactions').select('category_id').eq('type', 'expense').not('category_id', 'is', null).limit(1)).data[0].category_id
+  const r3 = await A.from('categories').update({ kind: 'income' }).eq('id', usedCat)
+  check(!!r3.error, 'No se puede cambiar el tipo de una categoría con movimientos', r3.error?.message)
+
+  const r4 = await A.from('categories').update({ name: 'HACK' }).eq('id', bCat).select()
+  check(r4.data?.length === 0, 'UPDATE de categoría de Bruno afecta 0 filas')
+  const r5 = await A.from('categories').delete().eq('id', bCat).select()
+  check(r5.data?.length === 0, 'DELETE de categoría de Bruno afecta 0 filas')
+}
+
 console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)')
 {
   const email = 'desechable.test@example.com'

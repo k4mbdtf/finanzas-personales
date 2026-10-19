@@ -11,7 +11,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 |---|---|---|
 | 1 | Modelo de datos, RLS, autenticación | ✅ |
 | 2 | Cuentas y transacciones | ✅ |
-| 3 | Categorías y presupuestos | ⏳ |
+| 3 | Categorías y presupuestos | ✅ |
 | 4 | Dashboard y gráficos | ⏳ |
 | 5 | PWA, exportación, despliegue y keep-alive | ⏳ |
 
@@ -20,7 +20,9 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 ## Estructura del proyecto
 
 ```
-supabase/migrations/0001_schema.sql   Esquema completo: tablas, índices, constraints, RLS, triggers
+supabase/migrations/
+  0001_schema.sql               Tablas, índices, constraints, RLS, triggers, eliminar cuenta
+  0002_categories_budgets.sql   Reglas de categorías/presupuestos y RPC spending_by_category
 scripts/
   lib.mjs                Utilidades (cliente admin y por usuario) — SOLO local
   seed.mjs               Crea 3 usuarios de prueba con datos distintos
@@ -37,6 +39,8 @@ src/
                          AmountInput, MonthSelector, AppShell (sidebar + barra inferior)
   features/accounts/     Página de cuentas y formulario
   features/transactions/ Drawer de registro rápido, listado, filtros
+  features/categories/   Categorías: crear, editar color/ícono, archivar, eliminar
+  features/budgets/      Presupuestos mensuales, barra de progreso, alertas
   pages/                 Auth, Inicio, Ajustes, Privacidad
 ```
 
@@ -90,7 +94,18 @@ abre la edición, con opción de eliminarlo (con confirmación).
 
 **Registro rápido** (botón `+ Nueva transacción`): el monto queda enfocado con teclado numérico,
 la categoría se elige con un toque, la cuenta recuerda la última usada y la fecha parte en "Hoy".
-Nota y etiquetas van en "Más detalles".
+Nota y etiquetas van en "Más detalles". Si el gasto deja su categoría sobre el 80% o el 100% del
+presupuesto, aparece un aviso.
+
+**Categorías** (`/#/categorias`, desde la sidebar o Ajustes): 15 predefinidas al registrarse y
+personalizables (nombre, ícono, color). El tipo (gasto/ingreso) no se puede cambiar si la categoría
+ya tiene movimientos (lo valida la BD). Eliminar una categoría deja sus movimientos "Sin categoría";
+archivarla la oculta de los formularios y conserva el historial.
+
+**Presupuestos** (`/#/presupuestos`): monto mensual por categoría de gasto. Barra de progreso
+verde-azulada, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del límite",
+"Excedido por $X") para no depender del color. Resumen del total y botón para copiar los
+presupuestos del mes anterior. Las transferencias no cuentan como gasto.
 
 ## Seguridad
 
@@ -108,8 +123,9 @@ Nota y etiquetas van en "Más detalles".
 ### 1. Crear el proyecto en Supabase
 
 1. Entra a [supabase.com](https://supabase.com) → **New project** (región recomendada: `South America (São Paulo)`).
-2. Ve a **SQL Editor** → **New query**, pega todo el contenido de
-   `supabase/migrations/0001_schema.sql` y ejecútalo.
+2. Ve a **SQL Editor** → **New query**, pega y ejecuta **en orden** cada archivo de
+   `supabase/migrations/` (`0001_schema.sql`, luego `0002_categories_budgets.sql`, …).
+   Cada archivo se ejecuta una sola vez; las fases siguientes agregan archivos nuevos.
 3. En **Project Settings → API** copia la **Project URL**, la **anon public key** y la
    **service_role key** (esta última solo para scripts locales).
 
@@ -171,6 +187,9 @@ Lo que verifica `test:isolation` (cada punto es una prueba automática):
 - [ ] No se puede crear una transacción en la cuenta de otro, usar su categoría, transferir hacia su cuenta, presupuestar su categoría ni mover una transacción propia a su cuenta (FKs compuestas).
 - [ ] Integridad: categoría de tipo incorrecto, monto 0, transferencia a la misma cuenta y cupo en cuenta que no es tarjeta son rechazados.
 - [ ] Sin sesión (`anon`) no se lee ninguna tabla ni se puede llamar a `delete_my_account`.
+- [ ] `spending_by_category` solo suma gastos propios (y `anon` no puede llamarla).
+- [ ] No se puede presupuestar una categoría de ingreso ni una categoría ajena (ni con `upsert`).
+- [ ] No se puede cambiar el tipo de una categoría con movimientos; editar/borrar categorías ajenas afecta 0 filas.
 - [ ] El registro crea perfil y categorías por defecto; `delete_my_account` borra todos los datos del usuario sin afectar a los demás.
 
 La contraseña de los usuarios de prueba está en `scripts/lib.mjs`.

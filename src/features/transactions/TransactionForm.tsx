@@ -7,6 +7,8 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useRefData } from '@/context/RefData'
 import { createTransaction, deleteTransaction, parseTags, updateTransaction } from '@/data/transactions'
+import { budgetUsage } from '@/data/budgets'
+import { budgetStatus } from '@/lib/budget'
 import { addDays } from '@/lib/dates'
 import { todayISO } from '@/lib/format'
 import { iconFor } from '@/lib/icons'
@@ -112,10 +114,25 @@ function TransactionFormInner({ tx, onDone }: Props) {
       try { localStorage.setItem(LAST_ACCOUNT_KEY, accountId) } catch { /* ignorar */ }
       toast(tx ? 'Movimiento actualizado' : 'Movimiento guardado')
       onDone()
+      if (input.type === 'expense' && input.category_id) {
+        void warnIfOverBudget(input.category_id, input.date.slice(0, 7))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar.')
       setBusy(false)
     }
+  }
+
+  /** Después de guardar un gasto, avisa si su categoría pasó el 80% o el 100%. */
+  async function warnIfOverBudget(categoryId: string, ym: string) {
+    try {
+      const usage = await budgetUsage(categoryId, ym)
+      if (!usage) return
+      const { pct, level } = budgetStatus(usage.spent, usage.amount)
+      const name = categories.find((c) => c.id === categoryId)?.name ?? 'Categoría'
+      if (level === 'over') toast(`${name}: excediste el presupuesto (${pct}% usado).`, 'error')
+      else if (level === 'warn') toast(`${name}: llevas el ${pct}% del presupuesto del mes.`, 'warning')
+    } catch { /* el aviso es opcional; si falla no molestamos */ }
   }
 
   async function onDelete() {

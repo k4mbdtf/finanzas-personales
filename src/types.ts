@@ -37,7 +37,17 @@ export type Category = {
   sort_order: number
 }
 
-export type TxType = 'income' | 'expense' | 'transfer'
+export type CategoryInput = Pick<Category, 'name' | 'kind' | 'color' | 'icon' | 'archived' | 'sort_order'>
+
+export type Budget = {
+  id: string
+  category_id: string
+  /** Primer día del mes: YYYY-MM-01 */
+  month: string
+  amount: number
+}
+
+export type TxType ='income' | 'expense' | 'transfer'
 
 export type Transaction = {
   id: string

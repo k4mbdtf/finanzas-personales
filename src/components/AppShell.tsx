@@ -11,15 +11,19 @@ import { MonthSelector } from './MonthSelector'
 import { TransactionDrawerProvider, useTransactionDrawer } from '@/features/transactions/TransactionDrawer'
 
 // Para agregar una sección nueva basta con sumarla aquí y en App.tsx.
+// `mobile: false` => solo en la sidebar (en celular se llega desde otra vista).
 const NAV = [
   { to: '/', label: 'Inicio', icon: '🏠', end: true },
   { to: '/movimientos', label: 'Movimientos', icon: '📋' },
+  { to: '/presupuestos', label: 'Presupuestos', icon: '🎯' },
   { to: '/cuentas', label: 'Cuentas', icon: '🏦' },
+  { to: '/categorias', label: 'Categorías', icon: '🏷️', mobile: false },
   { to: '/ajustes', label: 'Ajustes', icon: '⚙️' },
 ]
+const MOBILE_NAV = NAV.filter((n) => n.mobile !== false)
 
 /** Rutas donde se muestra el selector de mes. */
-const MONTH_ROUTES = ['/', '/movimientos']
+const MONTH_ROUTES = ['/', '/movimientos', '/presupuestos']
 
 export function AppShell() {
   return (
@@ -93,11 +97,11 @@ function Layout() {
 
       {/* Barra inferior (celular) */}
       <nav aria-label="Principal"
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 md:hidden">
-        {NAV.map((n) => (
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 md:hidden">
+        {MOBILE_NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end}
             className={({ isActive }) =>
-              `flex min-h-16 flex-col items-center justify-center gap-0.5 text-xs font-medium ${isActive
+              `flex min-h-16 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${isActive
                 ? 'text-teal-700 dark:text-teal-300'
                 : 'text-slate-500 dark:text-slate-400'}`}>
             <span className="text-xl" aria-hidden>{n.icon}</span>{n.label}
