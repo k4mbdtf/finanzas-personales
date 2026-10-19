@@ -27,6 +27,15 @@ export function monthLabel(ym: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/** "2026-10" -> "oct" (o "oct 25" si `withYear`) */
+export function monthShort(ym: string, withYear = false): string {
+  const [y, m] = ym.split('-').map(Number)
+  const s = new Intl.DateTimeFormat('es-CL', { month: 'short', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, 1)))
+    .replace('.', '')
+  return withYear ? `${s} ${String(y).slice(2)}` : s
+}
+
 /** Suma días a una fecha ISO. */
 export function addDays(iso: string, n: number): string {
   const [y, m, d] = iso.split('-').map(Number)

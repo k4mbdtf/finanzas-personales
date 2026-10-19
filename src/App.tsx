@@ -1,22 +1,25 @@
 // Rutas de la aplicación.
 // HashRouter (URLs tipo /#/ajustes): funciona en hosting estático como GitHub
 // Pages sin configurar rewrites ni 404.html.
+import { lazy, Suspense } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/auth/AuthProvider'
 import { isConfigured } from '@/lib/supabase'
 import { AppShell } from '@/components/AppShell'
-import { Alert, FullScreenLoader } from '@/components/ui'
+import { Alert, FullScreenLoader, Spinner } from '@/components/ui'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
-import HomePage from '@/pages/HomePage'
 import SettingsPage from '@/pages/SettingsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
 import AccountsPage from '@/features/accounts/AccountsPage'
 import TransactionsPage from '@/features/transactions/TransactionsPage'
 import BudgetsPage from '@/features/budgets/BudgetsPage'
 import CategoriesPage from '@/features/categories/CategoriesPage'
+
+// El dashboard trae Recharts (~100 kB): se carga aparte para que el login sea liviano.
+const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
 
 /** Solo usuarios con sesión. Si viene de un enlace de recuperación, lo manda a /restablecer. */
 function RequireAuth() {
@@ -63,7 +66,7 @@ export default function App() {
 
           <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
-              <Route index element={<HomePage />} />
+              <Route index element={<Suspense fallback={<Spinner label="Cargando el resumen…" />}><DashboardPage /></Suspense>} />
               <Route path="/movimientos" element={<TransactionsPage />} />
               <Route path="/cuentas" element={<AccountsPage />} />
               <Route path="/presupuestos" element={<BudgetsPage />} />

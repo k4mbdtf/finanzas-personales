@@ -12,7 +12,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | 1 | Modelo de datos, RLS, autenticación | ✅ |
 | 2 | Cuentas y transacciones | ✅ |
 | 3 | Categorías y presupuestos | ✅ |
-| 4 | Dashboard y gráficos | ⏳ |
+| 4 | Dashboard y gráficos | ✅ |
 | 5 | PWA, exportación, despliegue y keep-alive | ⏳ |
 
 ---
@@ -23,6 +23,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 supabase/migrations/
   0001_schema.sql               Tablas, índices, constraints, RLS, triggers, eliminar cuenta
   0002_categories_budgets.sql   Reglas de categorías/presupuestos y RPC spending_by_category
+  0003_dashboard.sql            RPC monthly_totals (ingresos/gastos por mes)
 scripts/
   lib.mjs                Utilidades (cliente admin y por usuario) — SOLO local
   seed.mjs               Crea 3 usuarios de prueba con datos distintos
@@ -41,6 +42,7 @@ src/
   features/transactions/ Drawer de registro rápido, listado, filtros
   features/categories/   Categorías: crear, editar color/ícono, archivar, eliminar
   features/budgets/      Presupuestos mensuales, barra de progreso, alertas
+  features/dashboard/    KPIs, dona de gastos, barras 12 meses (Recharts, carga diferida)
   pages/                 Auth, Inicio, Ajustes, Privacidad
 ```
 
@@ -106,6 +108,21 @@ archivarla la oculta de los formularios y conserva el historial.
 verde-azulada, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del límite",
 "Excedido por $X") para no depender del color. Resumen del total y botón para copiar los
 presupuestos del mes anterior. Las transferencias no cuentan como gasto.
+
+**Inicio / Dashboard** (`/#/`): para el mes seleccionado muestra:
+- KPIs: saldo total, ingresos, gastos y ahorro (con % de ahorro sobre ingresos), con variación
+  vs el mes anterior (▲/▼ + texto; en gastos subir es malo).
+- Presupuestos en alerta (≥ 80%).
+- Dona de gastos por categoría: top 5 + "Otros", con el color de cada categoría y una leyenda-tabla
+  con monto y %.
+- Barras de ingresos vs gastos de los 12 meses que terminan en el mes seleccionado, con botón
+  "Ver como tabla".
+- Últimos 5 movimientos.
+
+Los colores de ingresos/gastos (`src/lib/chartTheme.ts`) se validaron para contraste en claro y
+oscuro. Verde/rojo queda en el límite de distinción para daltonismo, por eso nunca se usan solos:
+leyenda, orden fijo, separación entre barras, tooltip y vista de tabla. Los totales los calcula la
+base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no cuentan.
 
 ## Seguridad
 
@@ -187,7 +204,7 @@ Lo que verifica `test:isolation` (cada punto es una prueba automática):
 - [ ] No se puede crear una transacción en la cuenta de otro, usar su categoría, transferir hacia su cuenta, presupuestar su categoría ni mover una transacción propia a su cuenta (FKs compuestas).
 - [ ] Integridad: categoría de tipo incorrecto, monto 0, transferencia a la misma cuenta y cupo en cuenta que no es tarjeta son rechazados.
 - [ ] Sin sesión (`anon`) no se lee ninguna tabla ni se puede llamar a `delete_my_account`.
-- [ ] `spending_by_category` solo suma gastos propios (y `anon` no puede llamarla).
+- [ ] `spending_by_category` y `monthly_totals` solo suman datos propios, excluyen transferencias, y `anon` no puede llamarlas.
 - [ ] No se puede presupuestar una categoría de ingreso ni una categoría ajena (ni con `upsert`).
 - [ ] No se puede cambiar el tipo de una categoría con movimientos; editar/borrar categorías ajenas afecta 0 filas.
 - [ ] El registro crea perfil y categorías por defecto; `delete_my_account` borra todos los datos del usuario sin afectar a los demás.

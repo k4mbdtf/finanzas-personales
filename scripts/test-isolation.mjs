@@ -131,6 +131,26 @@ console.log('\n7b. Fase 3: categorías, presupuestos y RPC de gasto')
   check(r5.data?.length === 0, 'DELETE de categoría de Bruno afecta 0 filas')
 }
 
+console.log('\n7c. Fase 4: RPC monthly_totals')
+{
+  const range = { p_from: '2000-01-01', p_to: '2100-12-31' }
+  const { data: mt, error } = await A.rpc('monthly_totals', range)
+  check(!error, 'Ana puede llamar a monthly_totals', error?.message)
+  const { data: anaTx } = await A.from('transactions').select('type, amount')
+  const sum = (t) => anaTx.filter((x) => x.type === t).reduce((s, x) => s + Number(x.amount), 0)
+  const inc = mt.reduce((s, r) => s + Number(r.income), 0)
+  const exp = mt.reduce((s, r) => s + Number(r.expense), 0)
+  check(inc === sum('income') && exp === sum('expense'),
+    `monthly_totals coincide con los datos de Ana y excluye transferencias (${inc}/${exp})`)
+  const { data: mtB } = await B.rpc('monthly_totals', range)
+  const incB = mtB.reduce((s, r) => s + Number(r.income), 0)
+  check(incB !== inc || sum('income') === 0, 'Bruno obtiene sus propios totales, no los de Ana')
+  const { error: eAnon } = await (await import('@supabase/supabase-js'))
+    .createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    .rpc('monthly_totals', range)
+  check(!!eAnon, 'anon no puede llamar a monthly_totals', eAnon?.message)
+}
+
 console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)')
 {
   const email = 'desechable.test@example.com'

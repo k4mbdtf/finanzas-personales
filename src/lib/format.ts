@@ -13,6 +13,23 @@ export function formatCLP(amount: number): string {
   return clp.format(Math.round(amount))
 }
 
+const oneDecimal = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 })
+
+/** Para ejes de gráficos: 1500000 -> "$1,5 M", 85000 -> "$85 mil", 900 -> "$900" */
+export function formatCLPCompact(amount: number): string {
+  const sign = amount < 0 ? '-' : ''
+  const n = Math.abs(amount)
+  if (n >= 1_000_000) return `${sign}$${oneDecimal.format(n / 1_000_000)} M`
+  if (n >= 1_000) return `${sign}$${oneDecimal.format(n / 1_000)} mil`
+  return `${sign}$${n}`
+}
+
+/** 0.123 -> "12%" ; 0.0123 -> "1,2%" */
+export function formatPct(ratio: number): string {
+  const pct = Math.abs(ratio * 100)
+  return `${pct.toLocaleString('es-CL', { maximumFractionDigits: pct < 10 ? 1 : 0 })}%`
+}
+
 /** "$12.500" / "12.500" / "12500" -> 12500. Devuelve null si no hay dígitos. */
 export function parseCLP(input: string): number | null {
   const digits = input.replace(/\D/g, '')
