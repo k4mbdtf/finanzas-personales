@@ -2,7 +2,7 @@
 import { useRefData } from '@/context/RefData'
 import { dayLabel } from '@/lib/dates'
 import { formatCLP } from '@/lib/format'
-import { iconFor } from '@/lib/icons'
+import { iconFor, isLiability } from '@/lib/icons'
 import type { Transaction } from '@/types'
 
 const TYPE_STYLE = {
@@ -42,11 +42,15 @@ export function TransactionList({
 function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) => void }) {
   const { accountById, categoryById } = useRefData()
   const cat = tx.category_id ? categoryById.get(tx.category_id) : undefined
-  const from = accountById.get(tx.account_id)?.name ?? 'Cuenta'
-  const to = tx.to_account_id ? accountById.get(tx.to_account_id)?.name ?? 'Cuenta' : ''
+  const fromAcc = accountById.get(tx.account_id)
+  const toAcc = tx.to_account_id ? accountById.get(tx.to_account_id) : undefined
+  const from = fromAcc?.name ?? 'Cuenta'
+  const to = toAcc?.name ?? 'Cuenta'
   const style = TYPE_STYLE[tx.type]
 
-  const title = tx.type === 'transfer' ? 'Transferencia' : cat?.name ?? 'Sin categoría'
+  // Transferencias hacia una deuda = pago; desde "me deben" = cobro.
+  const transferTitle = toAcc && isLiability(toAcc.type) ? 'Pago' : fromAcc?.type === 'receivable' ? 'Cobro' : 'Transferencia'
+  const title = tx.type === 'transfer' ? transferTitle : cat?.name ?? 'Sin categoría'
   const subtitle = [tx.note, tx.type === 'transfer' ? `${from} → ${to}` : from].filter(Boolean).join(' · ')
 
   return (
@@ -58,7 +62,10 @@ function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) =>
           {tx.type === 'transfer' ? '⇄' : iconFor(cat?.icon)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{title}</span>
+          <span className="block truncate font-medium">
+            {title}
+            {tx.recurring_rule_id && <span className="ml-1 text-xs" title="Recurrente"><span aria-hidden>🔁</span><span className="sr-only"> (recurrente)</span></span>}
+          </span>
           <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{subtitle}</span>
           {tx.tags.length > 0 && (
             <span className="mt-1 flex flex-wrap gap-1">

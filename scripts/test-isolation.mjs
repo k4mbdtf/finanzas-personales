@@ -153,6 +153,78 @@ console.log('\n7c. Fase 4: RPC monthly_totals')
   check(!!eAnon, 'anon no puede llamar a monthly_totals', eAnon?.message)
 }
 
+console.log('\n7d. Etapa 2: metas, recurrentes, cuotas, importaciones, patrimonio')
+{
+  for (const t of ['goals', 'goal_contributions', 'recurring_rules', 'installment_plans', 'import_batches', 'goal_progress']) {
+    const { data, error } = await A.from(t).select('user_id')
+    check(!error && data.every((r) => r.user_id === ana.userId), `Ana solo ve sus filas de ${t} (${data?.length ?? 0})`, error?.message)
+  }
+  const bPlan = (await B.from('installment_plans').select('id').limit(1)).data[0].id
+  const bGoal = (await B.from('goals').select('id').limit(1)).data[0].id
+  const bCard = (await B.from('accounts').select('id').eq('type', 'credit_card').limit(1)).data[0].id
+  const aRule = (await A.from('recurring_rules').select('id').limit(1)).data[0].id
+
+  let r = await A.from('installment_plans').select('*').eq('id', bPlan)
+  check(r.data.length === 0, 'Ana no puede leer la compra en cuotas de Bruno por id')
+  r = await A.from('goals').update({ name: 'HACK' }).eq('id', bGoal).select()
+  check(r.data.length === 0, 'UPDATE de meta de Bruno afecta 0 filas')
+  r = await A.from('installment_plans').delete().eq('id', bPlan).select()
+  check(r.data.length === 0, 'DELETE de compra de Bruno afecta 0 filas')
+  r = await B.from('recurring_rules').update({ amount: 1 }).eq('id', aRule).select()
+  check(r.data.length === 0, 'Bruno no puede modificar el recurrente de Ana')
+
+  r = await A.from('goals').insert({ name: 'x', target_amount: 1, account_id: bAcc })
+  check(!!r.error, 'Meta vinculada a cuenta de Bruno es rechazada', r.error?.message)
+  r = await A.from('goal_contributions').insert({ goal_id: bGoal, amount: 1000 })
+  check(!!r.error, 'Abono a meta de Bruno es rechazado', r.error?.message)
+  r = await A.from('recurring_rules').insert({ type: 'expense', amount: 1, account_id: bAcc, frequency: 'monthly', start_date: '2026-01-01' })
+  check(!!r.error, 'Recurrente sobre cuenta de Bruno es rechazado', r.error?.message)
+  r = await A.rpc('create_installment_plan', {
+    p_description: 'x', p_account_id: bCard, p_category_id: null, p_total_amount: 1000,
+    p_installments_count: 2, p_first_date: '2026-01-01', p_installment_amount: null,
+  })
+  check(!!r.error, 'Cuotas en la tarjeta de Bruno es rechazado', r.error?.message)
+  r = await A.rpc('import_transactions', {
+    p_account_id: bAcc, p_filename: 'x.csv', p_rows: [{ type: 'expense', amount: 1, date: '2026-01-01', import_hash: 'hack' }],
+  })
+  check(!!r.error, 'Importar en la cuenta de Bruno es rechazado', r.error?.message)
+
+  const bTxBefore = (await B.from('transactions').select('*', { count: 'exact', head: true })).count
+  await A.rpc('materialize_recurring', {})
+  const bTxAfter = (await B.from('transactions').select('*', { count: 'exact', head: true })).count
+  check(bTxBefore === bTxAfter, 'materialize_recurring de Ana no crea movimientos para Bruno')
+
+  const aBatch = (await A.from('import_batches').select('account_id').limit(1)).data[0]
+  r = await A.rpc('import_transactions', {
+    p_account_id: aBatch.account_id, p_filename: 'cartola-ana.csv',
+    p_rows: [{ type: 'expense', amount: 4500, date: '2026-01-01', note: 'CAFETERIA', import_hash: 'seed-ana-1' }],
+  })
+  check(!r.error && r.data[0].inserted === 0 && r.data[0].skipped === 1, 'Reimportar la misma fila se omite (duplicado)', r.error?.message)
+
+  const now = new Date().toISOString().slice(0, 8) + '01'
+  r = await A.rpc('net_worth_by_month', { p_from: now, p_to: now })
+  const { data: bals } = await A.from('account_balances').select('balance')
+  const sum = bals.reduce((s, b) => s + Number(b.balance), 0)
+  check(!r.error && Number(r.data[0].assets) - Number(r.data[0].liabilities) === sum,
+    `Patrimonio de Ana = suma de sus saldos (${sum})`, r.error?.message)
+
+  const { createClient } = await import('@supabase/supabase-js')
+  const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  for (const t of ['goals', 'goal_contributions', 'recurring_rules', 'installment_plans', 'import_batches', 'goal_progress']) {
+    const { data, error } = await anon.from(t).select('*')
+    check(!!error || data.length === 0, `anon no lee ${t}`, error?.message)
+  }
+  for (const [fn, args] of [
+    ['materialize_recurring', {}],
+    ['net_worth_by_month', { p_from: now, p_to: now }],
+    ['import_transactions', { p_account_id: aBatch.account_id, p_filename: 'x', p_rows: [] }],
+    ['create_installment_plan', { p_description: 'x', p_account_id: bCard, p_category_id: null, p_total_amount: 1, p_installments_count: 2, p_first_date: now, p_installment_amount: null }],
+  ]) {
+    const { error } = await anon.rpc(fn, args)
+    check(!!error, `anon no puede ejecutar ${fn}`, error?.message)
+  }
+}
+
 console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)')
 {
   const email = 'desechable.test@example.com'
@@ -165,12 +237,28 @@ console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)
   check(prof?.currency === 'CLP' && prof?.timezone === 'America/Santiago', 'Trigger creó el perfil (CLP, America/Santiago)')
   const { data: acc } = await client.from('accounts').insert({ name: 'Temp', type: 'cash' }).select().single()
   await client.from('transactions').insert({ type: 'income', amount: 10, account_id: acc.id })
+  // Datos de la Etapa 2, para comprobar que también se borran en cascada.
+  const { data: card } = await client.from('accounts')
+    .insert({ name: 'Tarjeta temp', type: 'credit_card', credit_limit: 100000 }).select().single()
+  await client.rpc('create_installment_plan', {
+    p_description: 'Temp', p_account_id: card.id, p_category_id: null, p_total_amount: 3000,
+    p_installments_count: 3, p_first_date: '2026-01-01', p_installment_amount: null,
+  })
+  const { data: g } = await client.from('goals').insert({ name: 'Temp', target_amount: 1000 }).select().single()
+  await client.from('goal_contributions').insert({ goal_id: g.id, amount: 100 })
+  await client.from('recurring_rules').insert({ type: 'income', amount: 5, account_id: acc.id, frequency: 'weekly', start_date: '2026-01-01' })
+  await client.rpc('import_transactions', {
+    p_account_id: acc.id, p_filename: 'temp.csv', p_rows: [{ type: 'income', amount: 7, date: '2026-01-02', import_hash: 'temp-1' }],
+  })
   const { error } = await client.rpc('delete_my_account')
-  check(!error, 'delete_my_account se ejecuta', error?.message)
-  const { data: left } = await admin.from('transactions').select('id').eq('user_id', userId)
-  const { data: leftA } = await admin.from('accounts').select('id').eq('user_id', userId)
-  const { data: leftC } = await admin.from('categories').select('id').eq('user_id', userId)
-  check(left.length + leftA.length + leftC.length === 0, 'No queda ningún dato del usuario (cascada)')
+  check(!error, 'delete_my_account se ejecuta (con datos de la Etapa 2)', error?.message)
+  let leftovers = 0
+  for (const t of ['transactions', 'accounts', 'categories', 'budgets', 'goals', 'goal_contributions',
+                   'recurring_rules', 'installment_plans', 'import_batches', 'profiles']) {
+    const { data } = await admin.from(t).select('user_id').eq('user_id', userId)
+    leftovers += data?.length ?? 0
+  }
+  check(leftovers === 0, 'No queda ningún dato del usuario en ninguna tabla (cascada)')
   // Ana/Bruno/Carla no se ven afectados:
   const { count: still } = await A.from('accounts').select('*', { count: 'exact', head: true })
   check(still > 0, 'Los datos de Ana siguen intactos')

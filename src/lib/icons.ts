@@ -44,7 +44,13 @@ export const ACCOUNT_TYPES = {
   bank: { label: 'Cuenta bancaria', icon: '🏦' },
   savings: { label: 'Ahorro', icon: '🐷' },
   credit_card: { label: 'Tarjeta de crédito', icon: '💳' },
+  loan: { label: 'Préstamo / deuda', icon: '🧾' },
+  receivable: { label: 'Me deben', icon: '🤝' },
 } as const
+
+/** Cuentas cuyo saldo negativo es una deuda (se muestran como "Debes $X"). */
+export const LIABILITY_TYPES = ['credit_card', 'loan'] as const
+export const isLiability = (type: string) => (LIABILITY_TYPES as readonly string[]).includes(type)
 
 /** Paleta para cuentas y categorías (contraste aceptable en claro y oscuro). */
 export const COLORS = [

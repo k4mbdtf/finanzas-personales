@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useRefData } from '@/context/RefData'
 import { formatCLP } from '@/lib/format'
 import { ACCOUNT_TYPES } from '@/lib/icons'
+import { cardStatus, loanStatus } from '@/lib/debt'
+import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/Modal'
 import { Alert, Button, EmptyState, Spinner } from '@/components/ui'
 import type { AccountWithBalance } from '@/types'
@@ -36,8 +38,8 @@ export default function AccountsPage() {
         <>
           <div className="rounded-2xl bg-teal-700 p-5 text-white dark:bg-teal-800">
             <p className="text-sm opacity-90">Saldo total</p>
-            <p className="text-3xl font-bold tabular-nums">{formatCLP(total)}</p>
-            <p className="mt-1 text-xs opacity-80">Incluye la deuda de tarjetas como saldo negativo.</p>
+            <p className="text-3xl font-bold">{formatCLP(total)}</p>
+            <p className="mt-1 text-xs opacity-80">Lo que tienes menos tus deudas (tarjetas y préstamos restan).</p>
           </div>
 
           <ul className="grid gap-3 sm:grid-cols-2">
@@ -71,9 +73,8 @@ export default function AccountsPage() {
 function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onClick: () => void }) {
   const t = ACCOUNT_TYPES[a.type]
   const isCard = a.type === 'credit_card'
-  const debt = isCard ? Math.max(0, -a.balance) : 0
-  const available = isCard && a.credit_limit != null ? a.credit_limit + a.balance : null
-  const usedPct = isCard && a.credit_limit ? Math.min(100, Math.round((debt / a.credit_limit) * 100)) : null
+  const { debt, available, usedPct } = cardStatus(a)
+  const loan = a.type === 'loan' ? loanStatus(a) : null
 
   return (
     <li>
@@ -97,10 +98,8 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
               <span className="text-xl font-bold">{formatCLP(debt)}</span>
             </p>
             {usedPct != null && (
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" role="progressbar"
-                aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Cupo utilizado">
-                <div className={`h-full ${usedPct >= 80 ? 'bg-amber-500' : 'bg-teal-600'}`} style={{ width: `${usedPct}%` }} />
-              </div>
+              <ProgressBar pct={usedPct} label={`Cupo utilizado: ${usedPct}%`}
+                barClass={usedPct >= 80 ? 'bg-amber-500' : 'bg-teal-600'} />
             )}
             <p className="text-xs text-slate-600 dark:text-slate-300">
               {available != null && <>Disponible {formatCLP(available)} de {formatCLP(a.credit_limit!)} · </>}
@@ -108,6 +107,25 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
               {a.payment_day && <>Paga el {a.payment_day}</>}
             </p>
           </>
+        ) : loan ? (
+          <>
+            <p className="tabular-nums">
+              <span className="text-sm text-slate-500 dark:text-slate-400">Debes </span>
+              <span className="text-xl font-bold">{formatCLP(loan.debt)}</span>
+            </p>
+            {loan.pct != null && <ProgressBar pct={loan.pct} label={`Pagado: ${loan.pct}%`} />}
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {a.counterparty && <>{a.counterparty} · </>}
+              {loan.pct != null && <>{loan.pct}% pagado · </>}
+              {a.payment_day && <>Paga el {a.payment_day}</>}
+            </p>
+          </>
+        ) : a.type === 'receivable' ? (
+          <p className="tabular-nums">
+            <span className="text-sm text-slate-500 dark:text-slate-400">Te deben </span>
+            <span className="text-xl font-bold">{formatCLP(Math.max(0, a.balance))}</span>
+            {a.counterparty && <span className="block text-xs text-slate-600 dark:text-slate-300">{a.counterparty}</span>}
+          </p>
         ) : (
           <p className={`text-xl font-bold tabular-nums ${a.balance < 0 ? 'text-red-700 dark:text-red-400' : ''}`}>
             {formatCLP(a.balance)}

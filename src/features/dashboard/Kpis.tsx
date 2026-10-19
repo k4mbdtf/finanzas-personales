@@ -1,6 +1,7 @@
 // Tarjetas de KPIs: saldo total, ingresos, gastos y ahorro del mes,
 // con variación respecto al mes anterior (flecha + texto, no solo color).
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { formatCLP, formatPct } from '@/lib/format'
 import { monthShort } from '@/lib/dates'
 import type { MonthTotal } from '@/data/dashboard'
@@ -50,7 +51,9 @@ export function Kpis({ totalBalance, current, previous }: {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile label="Saldo total" value={totalBalance} valueClass={totalBalance < 0 ? 'text-red-700 dark:text-red-400' : ''}>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Todas tus cuentas activas</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Cuentas menos deudas · <Link to="/patrimonio" className="font-medium text-teal-700 underline dark:text-teal-400">ver evolución</Link>
+        </p>
       </Tile>
       <Tile label="Ingresos del mes" value={current.income} valueClass="text-green-700 dark:text-green-400">
         <Delta current={current.income} previous={previous.income} polarity="up-good" prevLabel={prevLabel} />

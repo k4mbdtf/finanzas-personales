@@ -11,8 +11,8 @@ import { budgetUsage } from '@/data/budgets'
 import { budgetStatus } from '@/lib/budget'
 import { addDays } from '@/lib/dates'
 import { todayISO } from '@/lib/format'
-import { iconFor } from '@/lib/icons'
 import { AmountInput } from '@/components/AmountInput'
+import { CategoryPicker } from '@/components/CategoryPicker'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { Alert, Button, EmptyState, Field, Segmented, Select, Spinner } from '@/components/ui'
 import type { Transaction, TxInput, TxType } from '@/types'
@@ -23,11 +23,11 @@ function readLastAccount(): string | null {
   try { return localStorage.getItem(LAST_ACCOUNT_KEY) } catch { return null }
 }
 
-type Props = { tx?: Transaction; onDone: () => void }
+type Props = { tx?: Transaction; preset?: Partial<TxInput>; onDone: () => void }
 
 /** Espera a que estén las cuentas antes de montar el formulario (sus valores
  *  por defecto dependen de ellas). */
-export function TransactionForm({ tx, onDone }: Props) {
+export function TransactionForm({ tx, preset, onDone }: Props) {
   const { accounts, loading } = useRefData()
   if (loading) return <Spinner label="Cargando…" />
   if (!accounts.some((a) => !a.archived) && !tx) {
@@ -38,33 +38,38 @@ export function TransactionForm({ tx, onDone }: Props) {
       </EmptyState>
     )
   }
-  return <TransactionFormInner tx={tx} onDone={onDone} />
+  return <TransactionFormInner tx={tx} preset={preset} onDone={onDone} />
 }
 
-function TransactionFormInner({ tx, onDone }: Props) {
+function TransactionFormInner({ tx, preset, onDone }: Props) {
   const { accounts, categories } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
 
+  // Valores iniciales: el movimiento en edición, o el preset (p. ej. "Registrar pago").
+  const init: Partial<TxInput> = tx ?? preset ?? {}
+
   // En edición se incluye la cuenta original aunque esté archivada.
   const usableAccounts = accounts.filter(
-    (a) => !a.archived || a.id === tx?.account_id || a.id === tx?.to_account_id,
+    (a) => !a.archived || a.id === init.account_id || a.id === init.to_account_id,
   )
   const defaultAccount = (() => {
     const last = readLastAccount()
-    return usableAccounts.find((a) => a.id === last && !a.archived)?.id ?? usableAccounts[0]?.id ?? ''
+    // Si el preset fija el destino, el origen por defecto no puede ser esa misma cuenta.
+    const candidates = usableAccounts.filter((a) => !a.archived && a.id !== init.to_account_id)
+    return candidates.find((a) => a.id === last)?.id ?? candidates[0]?.id ?? ''
   })()
 
-  const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
-  const [amount, setAmount] = useState<number | null>(tx?.amount ?? null)
-  const [categoryId, setCategoryId] = useState<string | null>(tx?.category_id ?? null)
-  const [accountId, setAccountId] = useState(tx?.account_id ?? defaultAccount)
+  const [type, setType] = useState<TxType>(init.type ?? 'expense')
+  const [amount, setAmount] = useState<number | null>(init.amount ?? null)
+  const [categoryId, setCategoryId] = useState<string | null>(init.category_id ?? null)
+  const [accountId, setAccountId] = useState(init.account_id ?? defaultAccount)
   const [toAccountId, setToAccountId] = useState(
-    tx?.to_account_id ?? usableAccounts.find((a) => a.id !== (tx?.account_id ?? defaultAccount))?.id ?? '',
+    init.to_account_id ?? usableAccounts.find((a) => !a.archived && a.id !== (init.account_id ?? defaultAccount))?.id ?? '',
   )
-  const [date, setDate] = useState(tx?.date ?? todayISO())
-  const [note, setNote] = useState(tx?.note ?? '')
-  const [tagsText, setTagsText] = useState(tx?.tags.join(', ') ?? '')
+  const [date, setDate] = useState(init.date ?? todayISO())
+  const [note, setNote] = useState(init.note ?? '')
+  const [tagsText, setTagsText] = useState(init.tags?.join(', ') ?? '')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -159,6 +164,18 @@ function TransactionFormInner({ tx, onDone }: Props) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {error && <Alert>{error}</Alert>}
+      {tx?.installment_plan_id && (
+        <Alert kind="info">
+          Es la cuota {tx.installment_no} de una compra en cuotas. Puedes ajustar esta cuota; para cambiar la
+          compra completa ve a <Link to="/deudas" onClick={onDone} className="underline">Deudas y cuotas</Link>.
+        </Alert>
+      )}
+      {tx?.recurring_rule_id && (
+        <Alert kind="info">
+          Lo generó un movimiento recurrente. Los cambios aplican solo a este; para cambiar los próximos ve
+          a <Link to="/recurrentes" onClick={onDone} className="underline">Recurrentes</Link>.
+        </Alert>
+      )}
 
       <Segmented<TxType>
         label="Tipo de movimiento"
@@ -174,26 +191,7 @@ function TransactionFormInner({ tx, onDone }: Props) {
       <AmountInput label="Monto" value={amount} onChange={setAmount} autoFocus={!tx} big error={show('amount')} />
 
       {type !== 'transfer' && (
-        <fieldset>
-          <legend className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">Categoría</legend>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {kindCats.map((c) => {
-              const active = c.id === categoryId
-              return (
-                <button key={c.id} type="button" aria-pressed={active} onClick={() => setCategoryId(c.id)}
-                  className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-xs font-medium ${
-                    active
-                      ? 'border-transparent ring-2 ring-teal-600'
-                      : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700'}`}
-                  style={active ? { backgroundColor: `${c.color}26` } : undefined}>
-                  <span className="text-xl" aria-hidden>{iconFor(c.icon)}</span>
-                  <span className="line-clamp-1">{c.name}</span>
-                </button>
-              )
-            })}
-          </div>
-          {show('category') && <p className="mt-1 text-sm text-red-700 dark:text-red-400">{show('category')}</p>}
-        </fieldset>
+        <CategoryPicker categories={kindCats} value={categoryId} onChange={setCategoryId} error={show('category')} />
       )}
 
       <div className={`grid gap-3 ${type === 'transfer' ? 'grid-cols-2' : ''}`}>

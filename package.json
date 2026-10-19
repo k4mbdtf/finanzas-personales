@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "typecheck": "tsc",
     "seed": "node --env-file=scripts/.env.scripts scripts/seed.mjs",
-    "test:isolation": "node --env-file=scripts/.env.scripts scripts/test-isolation.mjs"
+    "test:isolation": "node --env-file=scripts/.env.scripts scripts/test-isolation.mjs",
+    "test:unit": "node --test --experimental-strip-types --no-warnings src/lib/*.test.ts src/features/*/*.test.ts",
+    "test:sql": "bash scripts/test-sql.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

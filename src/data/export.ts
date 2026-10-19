@@ -18,15 +18,26 @@ async function fetchAll<T>(table: string, order = 'created_at'): Promise<T[]> {
   }
 }
 
+type Row = Record<string, unknown>
+
 async function fetchEverything() {
-  const [profile, accounts, categories, transactions, budgets] = await Promise.all([
-    fetchAll<Record<string, unknown>>('profiles'),
+  const [profile, accounts, categories, transactions, budgets,
+    goals, goal_contributions, recurring_rules, installment_plans, import_batches] = await Promise.all([
+    fetchAll<Row>('profiles'),
     fetchAll<Account>('accounts'),
     fetchAll<Category>('categories'),
     fetchAll<Transaction>('transactions', 'date'),
-    fetchAll<Record<string, unknown>>('budgets', 'month'),
+    fetchAll<Row>('budgets', 'month'),
+    fetchAll<Row>('goals'),
+    fetchAll<Row>('goal_contributions', 'date'),
+    fetchAll<Row>('recurring_rules'),
+    fetchAll<Row>('installment_plans'),
+    fetchAll<Row>('import_batches'),
   ])
-  return { profile: profile[0] ?? null, accounts, categories, transactions, budgets }
+  return {
+    profile: profile[0] ?? null, accounts, categories, transactions, budgets,
+    goals, goal_contributions, recurring_rules, installment_plans, import_batches,
+  }
 }
 
 function download(content: string, filename: string, type: string) {
@@ -59,7 +70,11 @@ export async function exportTransactionsCSV(): Promise<number> {
   const { accounts, categories, transactions } = await fetchEverything()
   const acc = new Map(accounts.map((a) => [a.id, a.name]))
   const cat = new Map(categories.map((c) => [c.id, c.name]))
-  const header = ['Fecha', 'Tipo', 'Monto (CLP)', 'Categoría', 'Cuenta', 'Cuenta destino', 'Nota', 'Etiquetas']
+  const header = ['Fecha', 'Tipo', 'Monto (CLP)', 'Categoría', 'Cuenta', 'Cuenta destino', 'Nota', 'Etiquetas', 'Origen']
+  const origin = (t: Transaction) =>
+    t.installment_plan_id ? `Cuota ${t.installment_no ?? ''}`.trim()
+      : t.recurring_rule_id ? 'Recurrente'
+      : t.import_batch_id ? 'Importado' : 'Manual'
   const lines = transactions.map((t) => [
     t.date,
     TYPE_LABEL[t.type],
@@ -70,6 +85,7 @@ export async function exportTransactionsCSV(): Promise<number> {
     t.to_account_id ? acc.get(t.to_account_id) ?? '' : '',
     t.note ?? '',
     t.tags.join(', '),
+    origin(t),
   ].map(cell).join(';'))
   // BOM para que Excel reconozca UTF-8 (tildes y ñ).
   const csv = '﻿' + [header.join(';'), ...lines].join('\r\n')

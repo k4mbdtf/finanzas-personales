@@ -9,6 +9,7 @@ const LIGHT = {
   surface: '#ffffff', // = bg-white de las tarjetas
   income: '#008300',
   expense: '#e34948',
+  net: '#2a78d6', // patrimonio (serie única, validada vs superficie)
   other: '#94a3b8',
   grid: '#e2e8f0',
   axis: '#64748b',
@@ -18,6 +19,7 @@ const DARK: typeof LIGHT = {
   surface: '#1e293b', // = dark:bg-slate-800 de las tarjetas
   income: '#0ca30c',
   expense: '#e66767',
+  net: '#3987e5',
   other: '#64748b',
   grid: '#334155',
   axis: '#94a3b8',

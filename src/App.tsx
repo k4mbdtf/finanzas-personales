@@ -1,7 +1,7 @@
 // Rutas de la aplicación.
 // HashRouter (URLs tipo /#/ajustes): funciona en hosting estático como GitHub
 // Pages sin configurar rewrites ni 404.html.
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/auth/AuthProvider'
 import { isConfigured } from '@/lib/supabase'
@@ -11,15 +11,24 @@ import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
-import SettingsPage from '@/pages/SettingsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
 import AccountsPage from '@/features/accounts/AccountsPage'
 import TransactionsPage from '@/features/transactions/TransactionsPage'
-import BudgetsPage from '@/features/budgets/BudgetsPage'
-import CategoriesPage from '@/features/categories/CategoriesPage'
+import MorePage from '@/pages/MorePage'
 
-// El dashboard trae Recharts (~100 kB): se carga aparte para que el login sea liviano.
+// Carga diferida: cada pantalla secundaria se descarga recién al abrirla, así la
+// app abre rápido en el celular (las de gráficos traen Recharts, ~100 kB).
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
+const NetWorthPage = lazy(() => import('@/features/networth/NetWorthPage'))
+const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'))
+const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'))
+const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'))
+const GoalsPage = lazy(() => import('@/features/goals/GoalsPage'))
+const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'))
+const ImportPage = lazy(() => import('@/features/import/ImportPage'))
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+
+const page = (el: ReactNode) => <Suspense fallback={<Spinner label="Cargando…" />}>{el}</Suspense>
 
 /** Solo usuarios con sesión. Si viene de un enlace de recuperación, lo manda a /restablecer. */
 function RequireAuth() {
@@ -66,12 +75,18 @@ export default function App() {
 
           <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
-              <Route index element={<Suspense fallback={<Spinner label="Cargando el resumen…" />}><DashboardPage /></Suspense>} />
+              <Route index element={page(<DashboardPage />)} />
               <Route path="/movimientos" element={<TransactionsPage />} />
               <Route path="/cuentas" element={<AccountsPage />} />
-              <Route path="/presupuestos" element={<BudgetsPage />} />
-              <Route path="/categorias" element={<CategoriesPage />} />
-              <Route path="/ajustes" element={<SettingsPage />} />
+              <Route path="/presupuestos" element={page(<BudgetsPage />)} />
+              <Route path="/categorias" element={page(<CategoriesPage />)} />
+              <Route path="/deudas" element={page(<DebtsPage />)} />
+              <Route path="/metas" element={page(<GoalsPage />)} />
+              <Route path="/recurrentes" element={page(<RecurringPage />)} />
+              <Route path="/importar" element={page(<ImportPage />)} />
+              <Route path="/patrimonio" element={page(<NetWorthPage />)} />
+              <Route path="/mas" element={<MorePage />} />
+              <Route path="/ajustes" element={page(<SettingsPage />)} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

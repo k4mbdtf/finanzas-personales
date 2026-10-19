@@ -14,6 +14,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | 3 | Categorías y presupuestos | ✅ |
 | 4 | Dashboard y gráficos | ✅ |
 | 5 | PWA, exportación, despliegue y keep-alive | ✅ |
+| Etapa 2 | Deudas y cuotas, metas, recurrentes, importar cartolas, patrimonio | ✅ |
 
 **Inicio rápido:** [1. Supabase](#1-crear-el-proyecto-en-supabase) → [2. Auth](#2-configurar-auth) →
 [3. Captcha](#3-activar-el-captcha-cloudflare-turnstile) → [4. Local](#4-ejecutar-en-local) →
@@ -29,22 +30,27 @@ supabase/migrations/
   0002_categories_budgets.sql   Reglas de categorías/presupuestos y RPC spending_by_category
   0003_dashboard.sql            RPC monthly_totals (ingresos/gastos por mes)
   0004_keepalive.sql            RPC keepalive() para el workflow anti-pausa
+  0005_etapa2.sql               Deudas, metas, recurrentes, cuotas, importaciones, patrimonio
+supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
+supabase/email-templates/ Correos de confirmación y recuperación en español
 .github/workflows/
-  deploy.yml             Build + publicación en GitHub Pages en cada push a main
+  deploy.yml             Pruebas + build + publicación en GitHub Pages en cada push a main
   keepalive.yml          Ping a Supabase cada 3 días
 public/                  manifest.webmanifest, sw.js (service worker), íconos
 scripts/
   lib.mjs                Utilidades (cliente admin y por usuario) — SOLO local
   seed.mjs               Crea 3 usuarios de prueba con datos distintos
-  test-isolation.mjs     Pruebas automáticas de aislamiento entre usuarios
+  test-isolation.mjs     Pruebas automáticas de aislamiento entre usuarios (API real)
+  test-sql.sh            Aplica todas las migraciones en un PostgreSQL desechable y las prueba
 src/
   types.ts               Tipos de las tablas (actualizar si cambia el SQL)
   lib/                   supabase (cliente), format (CLP), dates (meses), errors,
                          events (recarga automática), icons (emoji de categorías),
-                         theme (claro/oscuro), pwa (service worker, instalar), chartTheme
+                         theme (claro/oscuro), pwa (service worker, instalar), chartTheme,
+                         csv (cartolas), recurring (fechas), debt, goals  (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
-  data/                  Única capa que habla con Supabase (accounts, categories,
-                         transactions, budgets, dashboard, export)
+  data/                  Única capa que habla con Supabase (accounts, categories, transactions,
+                         budgets, dashboard, export, goals, recurring, installments, imports, netWorth)
   context/               RefData (cuentas y categorías globales), Month (mes seleccionado)
   auth/AuthProvider.tsx  Sesión global + detección de recuperación de contraseña
   components/            UI base, Modal (<dialog>), Feedback (confirmar/toast),
@@ -54,7 +60,13 @@ src/
   features/categories/   Categorías: crear, editar color/ícono, archivar, eliminar
   features/budgets/      Presupuestos mensuales, barra de progreso, alertas
   features/dashboard/    KPIs, dona de gastos, barras 12 meses (Recharts, carga diferida)
-  pages/                 Auth, Ajustes (tema, instalar, exportar, contraseña, eliminar), Privacidad
+  features/debts/        Deudas y cuotas: préstamos, tarjetas, compras en cuotas, me deben
+  features/goals/        Metas de ahorro y abonos
+  features/recurring/    Movimientos recurrentes
+  features/import/       Importar cartolas CSV (rows.ts + pruebas)
+  features/networth/     Patrimonio neto en el tiempo
+  components/nav.ts      Secciones del menú (agregar una sección = una línea aquí + ruta en App.tsx)
+  pages/                 Auth, Ajustes, Más (celular), Privacidad
 ```
 
 ### Cómo fluyen los datos
@@ -70,15 +82,21 @@ Así no se necesita una librería de caché y agregar una vista nueva es solo us
 ```
 auth.users (Supabase)
   └─ profiles      1:1  configuración (moneda CLP, zona horaria)
-  └─ accounts      cash | bank | savings | credit_card (+ cupo, día de cierre, día de pago)
+  └─ accounts      cash | bank | savings | credit_card | loan | receivable
+  │                (+ cupo/cierre/pago en tarjetas; monto, cuota, plazo, tasa y acreedor en préstamos)
   └─ categories    income | expense, color, ícono (15 por defecto al registrarse)
   └─ transactions  income | expense | transfer
   │     account_id    → accounts     (FK compuesta con user_id)
   │     to_account_id → accounts     (solo transfer, FK compuesta)
   │     category_id   → categories   (FK compuesta; el tipo debe coincidir)
   │     tags text[]
+  │     recurring_rule_id, installment_plan_id + installment_no, import_batch_id + import_hash
   └─ budgets       presupuesto mensual por categoría (month = 1er día del mes)
-view account_balances   saldo por cuenta (security_invoker, respeta RLS)
+  └─ goals ─ goal_contributions      metas de ahorro y abonos/retiros
+  └─ recurring_rules                 plantilla + frecuencia; generan transactions
+  └─ installment_plans               compra en cuotas; sus cuotas son transactions
+  └─ import_batches                  cada cartola importada (para deshacer)
+views: account_balances (saldo por cuenta), goal_progress (avance de metas) — security_invoker
 ```
 
 Decisiones clave:
@@ -92,20 +110,20 @@ Decisiones clave:
 - **Totales en la BD**: los agregados (gasto por categoría, totales mensuales) son funciones SQL
   `security invoker`, así respetan RLS y no hay que traer miles de filas al navegador.
 
-### Etapa 2: cómo está preparada la arquitectura
+### Decisiones de la Etapa 2
 
-Cada funcionalidad nueva = **una migración nueva** (`0005_...sql`) + un archivo en `src/data/` +
-una carpeta en `src/features/` + una línea en `NAV` (`AppShell.tsx`) y en `App.tsx`. Siempre con el
-mismo patrón: `user_id uuid not null default auth.uid()`, RLS con las 4 políticas, FKs compuestas
-`(id, user_id)` hacia cuentas/categorías y una prueba en `test-isolation.mjs`.
-
-| Funcionalidad | Diseño previsto |
+| Funcionalidad | Cómo funciona |
 |---|---|
-| Metas de ahorro | tabla `goals` (nombre, monto objetivo, fecha, `account_id` opcional); el avance se calcula desde el saldo de la cuenta o con aportes = transferencias hacia la cuenta de ahorro. |
-| Transacciones recurrentes | tabla `recurring_rules` (plantilla de transacción + frecuencia + próxima fecha). Sin servidor propio: al abrir la app se generan las pendientes con una RPC `materialize_recurring()` idempotente (o un cron de `pg_cron` en Supabase). Las generadas llevan `recurring_id` en `transactions`. |
-| Deudas y compras en cuotas | tabla `installment_plans` (monto total, n° de cuotas, cuenta tarjeta, primera fecha); cada cuota es una `transaction` con `installment_plan_id` y `installment_no`, para que el presupuesto del mes vea solo la cuota. |
-| Importar cartolas CSV | parser en el navegador por banco (`src/features/import/parsers/`); columna `import_hash` (fecha+monto+descripción normalizada+cuenta) con índice único parcial `(user_id, import_hash) where import_hash is not null` y `upsert … ignoreDuplicates` para descartar duplicados. |
-| Patrimonio neto en el tiempo | RPC `net_worth_by_month()` que reconstruye el saldo de todas las cuentas a fin de cada mes a partir de saldos iniciales + transacciones (no requiere tabla nueva); se grafica con la misma base de `IncomeExpenseChart`. |
+| **Deudas** | Un préstamo es una cuenta `loan` con saldo negativo (como la tarjeta) y "me deben" una cuenta `receivable` con saldo positivo. Pagar o cobrar = **transferencia**: el capital no se cuenta como gasto y el patrimonio cuadra solo. Los intereses, si quieres, se anotan como gasto aparte. |
+| **Compras en cuotas** | `create_installment_plan()` crea la compra y **todas** sus cuotas (una por mes, la última absorbe el redondeo; o cuota fija si tiene interés) de forma atómica. El cupo de la tarjeta se descuenta completo al comprar y cada cuota cuenta como gasto en su mes. Cambiar descripción/categoría se propaga a las cuotas; montos y plazo no se editan (se elimina y se crea de nuevo). |
+| **Recurrentes** | `materialize_recurring()` genera los movimientos pendientes hasta hoy cada vez que se abre la app. Es idempotente: `unique (recurring_rule_id, recurring_date)` impide duplicados aunque se llame muchas veces o desde dos pestañas. Las fechas se calculan siempre desde el inicio (31-ene → 28-feb → 31-mar), igual en SQL y en `src/lib/recurring.ts`. Al reactivar una pausada no se rellenan las fechas perdidas. |
+| **Metas** | El avance es el saldo de una cuenta vinculada (vista `goal_progress`) o la suma de abonos manuales. Se calcula cuánto ahorrar al mes para llegar a la fecha. |
+| **Importar cartolas** | Sirve para cualquier banco: el CSV se lee en el navegador (UTF-8 o Windows-1252, `;` `,` o tabulador, montos `$1.234.567`, `(500)`, `500-`, fechas `dd/mm/aaaa`, `01-oct-2026`…), se adivinan las columnas y el usuario las corrige. Cada fila tiene una huella SHA-256 (cuenta + fecha + monto + descripción + n° de repetición); `unique (user_id, import_hash)` omite lo ya importado. Lo que coincide con movimientos ingresados a mano se marca como "posible duplicado". La importación es atómica y se puede **deshacer** por lote. Se sugieren categorías según descripciones anteriores. |
+| **Patrimonio** | `net_worth_by_month()` reconstruye el saldo de cada cuenta a fin de mes (saldo inicial + movimientos; las cuotas desde la fecha de compra). Activos = efectivo, banco, ahorro y me deben; deudas = tarjetas y préstamos. |
+
+Para agregar más funcionalidades se sigue el mismo patrón: **una migración nueva** + un archivo en
+`src/data/` + una carpeta en `src/features/` + una línea en `components/nav.ts` y en `App.tsx`, con
+`user_id default auth.uid()`, RLS de 4 políticas, FKs compuestas y pruebas en `supabase/tests/`.
 
 ## Funcionalidades
 
@@ -143,6 +161,14 @@ presupuestos del mes anterior. Las transferencias no cuentan como gasto.
   "Ver como tabla".
 - Últimos 5 movimientos.
 
+**Deudas y cuotas** (`/#/deudas`): préstamos con % pagado y cuotas restantes, tarjetas con cupo
+usado, compras en cuotas ("cuota 3 de 12, próxima el…") y lo que te deben. Botones **Registrar pago**,
+**Pagar** y **Registrar cobro** abren el registro rápido ya completado.
+
+**Metas** (`/#/metas`), **Recurrentes** (`/#/recurrentes`), **Importar cartola** (`/#/importar`) y
+**Patrimonio** (`/#/patrimonio`, línea de 12 o 24 meses con vista de tabla). En el celular están en
+**Más** (barra inferior); en escritorio, en la barra lateral.
+
 **Ajustes** (`/#/ajustes`): tema (Sistema / Claro / Oscuro), instalar la app, **exportar mis datos**
 (movimientos en CSV con `;` y UTF-8 para Excel, o respaldo completo en JSON), cambiar contraseña,
 eliminar la cuenta y todos los datos, y enlace a Privacidad.
@@ -166,8 +192,9 @@ base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no
 - El frontend solo usa la **anon key**. La **service_role** solo se usa en `scripts/` en tu equipo
   y está en `scripts/.env.scripts` (ignorado por git). **Nunca** la pongas en variables `VITE_*`
   ni en los secrets de GitHub.
-- Las funciones SQL invocables: `delete_my_account`, `spending_by_category`, `monthly_totals`
-  (solo `authenticated`) y `keepalive` (también `anon`, no lee datos).
+- Las funciones SQL invocables: `delete_my_account`, `spending_by_category`, `monthly_totals`,
+  `materialize_recurring`, `create_installment_plan`, `import_transactions`, `net_worth_by_month`
+  (solo `authenticated`, todas `security invoker` = respetan RLS) y `keepalive` (también `anon`, no lee datos).
 - El service worker no cachea ninguna respuesta de Supabase.
 
 ---
@@ -220,7 +247,24 @@ cp .env.example .env.local     # y completa URL, anon key y site key
 npm run dev                    # http://localhost:5173
 ```
 
-### 5. Datos de prueba y pruebas de aislamiento
+### 5. Pruebas
+
+Hay tres niveles; los dos primeros no tocan Supabase y corren también en GitHub Actions antes de
+cada despliegue:
+
+```bash
+npm run test:unit   # lógica pura: CSV de bancos, fechas recurrentes, deudas, metas (node --test)
+npm run test:sql    # aplica TODAS las migraciones en un PostgreSQL desechable (Docker) y prueba
+                    # reglas, RPCs, aislamiento entre usuarios, permisos de anon y borrado en cascada
+```
+
+`test:sql` necesita Docker en ejecución. Imita lo mínimo de Supabase (`supabase/tests/00_supabase_stub.sql`),
+aplica 0001–0004, carga datos "existentes" y recién ahí aplica 0005, para verificar que la migración
+funciona sobre datos reales.
+
+El tercer nivel prueba contra la API real de tu proyecto:
+
+#### Datos de prueba y pruebas de aislamiento (API real)
 
 > ⚠️ Usa un **proyecto Supabase de desarrollo**, no el de producción. Los scripts usan la
 > service_role key y crean usuarios `*.test@example.com`.
@@ -292,4 +336,4 @@ correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commi
 - **Forzar que los usuarios reciban una versión nueva del service worker:** sube `VERSION` en `public/sw.js`
   (normalmente no hace falta: el HTML se pide siempre a la red primero).
 - **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run preview` ·
-  `npm run seed` · `npm run test:isolation`.
+  `npm run test:unit` · `npm run test:sql` · `npm run seed` · `npm run test:isolation`.

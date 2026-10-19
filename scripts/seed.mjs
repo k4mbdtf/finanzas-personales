@@ -77,6 +77,54 @@ for (const { email } of TEST_USERS) {
   })
   if (e3) throw e3
 
-  console.log(`✔ ${email} (${userId}): ${accs.length} cuentas, ${rows.length} transacciones`)
+  await seedStage2(client, email, accs, catId)
+
+  console.log(`✔ ${email} (${userId}): ${accs.length} cuentas, ${rows.length} transacciones + datos de la Etapa 2`)
+}
+
+/** Datos de la Etapa 2 (migración 0005), distintos por usuario. */
+async function seedStage2(client, email, accs, catId) {
+  const ok = (res, what) => { if (res.error) throw new Error(`${what}: ${res.error.message}`); return res.data }
+
+  if (email.startsWith('ana')) {
+    ok(await client.from('accounts').insert({
+      name: 'Crédito consumo Ana', type: 'loan', initial_balance: -500000, loan_amount: 1000000,
+      loan_installment: 50000, loan_installments_count: 24, payment_day: 10, counterparty: 'Banco Ana',
+    }), 'préstamo')
+    const goal = ok(await client.from('goals').insert({ name: 'Vacaciones Ana', target_amount: 600000 }).select().single(), 'meta')
+    ok(await client.from('goal_contributions').insert({ goal_id: goal.id, amount: 100000 }), 'abono')
+    ok(await client.from('recurring_rules').insert({
+      type: 'income', amount: 1500000, account_id: accs[1].id, category_id: catId('Sueldo'),
+      note: 'Sueldo mensual', frequency: 'monthly', start_date: iso(40),
+    }), 'recurrente')
+    ok(await client.rpc('materialize_recurring', {}), 'materialize')
+    ok(await client.rpc('import_transactions', {
+      p_account_id: accs[1].id, p_filename: 'cartola-ana.csv',
+      p_rows: [
+        { type: 'expense', amount: 4500, date: iso(3), note: 'CAFETERIA', import_hash: 'seed-ana-1' },
+        { type: 'expense', amount: 23990, date: iso(4), note: 'FARMACIA', import_hash: 'seed-ana-2' },
+      ],
+    }), 'importación')
+  }
+
+  if (email.startsWith('bruno')) {
+    const card = accs.find((a) => a.type === 'credit_card')
+    ok(await client.rpc('create_installment_plan', {
+      p_description: 'Televisor Bruno', p_account_id: card.id, p_category_id: catId('Ocio'),
+      p_total_amount: 300000, p_installments_count: 6, p_first_date: iso(10), p_installment_amount: null,
+    }), 'cuotas')
+    const savings = accs.find((a) => a.type === 'savings')
+    ok(await client.from('goals').insert({ name: 'Auto Bruno', target_amount: 8000000, account_id: savings.id }), 'meta')
+  }
+
+  if (email.startsWith('carla')) {
+    ok(await client.from('accounts').insert({
+      name: 'Pedro me debe', type: 'receivable', initial_balance: 50000, counterparty: 'Pedro',
+    }), 'me deben')
+    ok(await client.from('recurring_rules').insert({
+      type: 'expense', amount: 9990, account_id: accs[0].id, category_id: catId('Suscripciones'),
+      note: 'Streaming Carla', frequency: 'monthly', start_date: iso(0),
+    }), 'recurrente')
+  }
 }
 console.log('\nContraseña de todos los usuarios de prueba: ver PASSWORD en scripts/lib.mjs')
