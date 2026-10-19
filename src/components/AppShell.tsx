@@ -1,33 +1,109 @@
-// Estructura de la app autenticada.
-// Fase 1: barra superior simple. En fases 2–4 se agrega sidebar (escritorio),
-// barra inferior (celular), selector de mes y botón "+ Nueva transacción".
-import { NavLink, Outlet } from 'react-router-dom'
+// Estructura de la app autenticada:
+//  * Escritorio (md+): sidebar fija a la izquierda.
+//  * Celular: barra inferior + botón flotante "+ Nueva transacción".
+//  * Selector de mes arriba en las vistas que dependen del mes.
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { MonthProvider } from '@/context/Month'
+import { RefDataProvider } from '@/context/RefData'
+import { FeedbackProvider } from './Feedback'
+import { MonthSelector } from './MonthSelector'
+import { TransactionDrawerProvider, useTransactionDrawer } from '@/features/transactions/TransactionDrawer'
 
-const navCls = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-sm font-medium ${isActive
-    ? 'bg-teal-50 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200'
-    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`
+// Para agregar una sección nueva basta con sumarla aquí y en App.tsx.
+const NAV = [
+  { to: '/', label: 'Inicio', icon: '🏠', end: true },
+  { to: '/movimientos', label: 'Movimientos', icon: '📋' },
+  { to: '/cuentas', label: 'Cuentas', icon: '🏦' },
+  { to: '/ajustes', label: 'Ajustes', icon: '⚙️' },
+]
+
+/** Rutas donde se muestra el selector de mes. */
+const MONTH_ROUTES = ['/', '/movimientos']
 
 export function AppShell() {
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
-        <nav className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-2" aria-label="Principal">
-          <span className="mr-auto font-bold">💰 Mis Finanzas</span>
-          <NavLink to="/" end className={navCls}>Inicio</NavLink>
-          <NavLink to="/ajustes" className={navCls}>Ajustes</NavLink>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Salir
-          </button>
+    <FeedbackProvider>
+      <RefDataProvider>
+        <MonthProvider>
+          <TransactionDrawerProvider>
+            <Layout />
+          </TransactionDrawerProvider>
+        </MonthProvider>
+      </RefDataProvider>
+    </FeedbackProvider>
+  )
+}
+
+function Layout() {
+  const { pathname } = useLocation()
+  const { openNew } = useTransactionDrawer()
+  const showMonth = MONTH_ROUTES.includes(pathname)
+
+  return (
+    <div className="min-h-dvh md:flex">
+      <a href="#contenido" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-2">
+        Saltar al contenido
+      </a>
+
+      {/* Sidebar (escritorio) */}
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-2 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex">
+        <p className="mb-4 px-2 text-lg font-bold">💰 Mis Finanzas</p>
+        <button
+          onClick={() => openNew()}
+          className="mb-4 min-h-11 rounded-lg bg-teal-700 px-4 font-medium text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
+        >
+          + Nueva transacción
+        </button>
+        <nav aria-label="Principal" className="flex flex-col gap-1">
+          {NAV.map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.end}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 font-medium ${isActive
+                  ? 'bg-teal-50 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>
+              <span aria-hidden>{n.icon}</span>{n.label}
+            </NavLink>
+          ))}
         </nav>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        <Outlet />
-      </main>
+        <button onClick={() => supabase.auth.signOut()}
+          className="mt-auto rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          ↩ Cerrar sesión
+        </button>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        {showMonth && (
+          <header className="sticky top-0 z-10 flex justify-center border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+            <MonthSelector />
+          </header>
+        )}
+        <main id="contenido" className="mx-auto max-w-4xl px-4 pt-6 pb-36 md:pb-10">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* Botón flotante (celular) */}
+      <button
+        onClick={() => openNew()}
+        className="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex min-h-14 items-center gap-2 rounded-full bg-teal-700 px-5 font-semibold text-white shadow-lg active:scale-95 dark:bg-teal-600 md:hidden"
+      >
+        <span className="text-2xl leading-none" aria-hidden>+</span> Nueva transacción
+      </button>
+
+      {/* Barra inferior (celular) */}
+      <nav aria-label="Principal"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 md:hidden">
+        {NAV.map((n) => (
+          <NavLink key={n.to} to={n.to} end={n.end}
+            className={({ isActive }) =>
+              `flex min-h-16 flex-col items-center justify-center gap-0.5 text-xs font-medium ${isActive
+                ? 'text-teal-700 dark:text-teal-300'
+                : 'text-slate-500 dark:text-slate-400'}`}>
+            <span className="text-xl" aria-hidden>{n.icon}</span>{n.label}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

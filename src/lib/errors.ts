@@ -31,6 +31,24 @@ export function dbErrorMessage(error: PostgrestError | null | undefined): string
     case '23503': return 'El registro está en uso o hace referencia a datos que no existen.'
     case '23514': return 'Los datos no cumplen las reglas (revisa montos, fechas y categorías).'
     case '42501': return 'No tienes permiso para realizar esta acción.'
-    default: return 'No se pudo guardar. Inténtalo de nuevo.'
+    case 'PGRST301': return 'Tu sesión expiró. Vuelve a iniciar sesión.'
+    default:
+      if (/fetch|network/i.test(error.message)) return 'Sin conexión con el servidor. Revisa tu internet.'
+      return 'No se pudo completar la operación. Inténtalo de nuevo.'
   }
+}
+
+/** Error con mensaje para el usuario y el código original de Postgres. */
+export class AppError extends Error {
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+/** Devuelve `data` o lanza un AppError con mensaje en español. */
+export function unwrap<T>(res: { data: T | null; error: PostgrestError | null }): T {
+  if (res.error) throw new AppError(dbErrorMessage(res.error), res.error.code)
+  return res.data as T
 }

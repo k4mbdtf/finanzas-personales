@@ -13,6 +13,8 @@ import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import HomePage from '@/pages/HomePage'
 import SettingsPage from '@/pages/SettingsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
+import AccountsPage from '@/features/accounts/AccountsPage'
+import TransactionsPage from '@/features/transactions/TransactionsPage'
 
 /** Solo usuarios con sesión. Si viene de un enlace de recuperación, lo manda a /restablecer. */
 function RequireAuth() {
@@ -60,6 +62,8 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
               <Route index element={<HomePage />} />
+              <Route path="/movimientos" element={<TransactionsPage />} />
+              <Route path="/cuentas" element={<AccountsPage />} />
               <Route path="/ajustes" element={<SettingsPage />} />
             </Route>
           </Route>

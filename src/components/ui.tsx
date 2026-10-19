@@ -1,5 +1,5 @@
 // Componentes base de UI. Pequeños a propósito: fáciles de leer y modificar.
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { useId } from 'react'
 
 export function Button({
@@ -37,9 +37,13 @@ export function Spinner({ label }: { label?: string }) {
   )
 }
 
+const inputCls = `min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900
+  focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/30
+  aria-[invalid=true]:border-red-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100`
+
 export function Field({
-  label, hint, error, ...rest
-}: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string }) {
+  label, hint, error, inputClassName = '', ...rest
+}: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string; inputClassName?: string }) {
   const id = useId()
   const describedBy = [hint && `${id}-hint`, error && `${id}-err`].filter(Boolean).join(' ') || undefined
   return (
@@ -50,12 +54,75 @@ export function Field({
         {...rest}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900
-          focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/30
-          aria-[invalid=true]:border-red-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+        className={`${inputCls} ${inputClassName}`}
       />
       {hint && <p id={`${id}-hint`} className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
       {error && <p id={`${id}-err`} className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+    </div>
+  )
+}
+
+export function Select({
+  label, error, children, ...rest
+}: SelectHTMLAttributes<HTMLSelectElement> & { label: string; error?: string }) {
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</label>
+      <select id={id} {...rest} aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-err` : undefined} className={inputCls}>
+        {children}
+      </select>
+      {error && <p id={`${id}-err`} className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+    </div>
+  )
+}
+
+/** Selector de opciones excluyentes (radio buttons con aspecto de pestañas). */
+export function Segmented<T extends string>({
+  label, value, options, onChange,
+}: {
+  label: string
+  value: T
+  options: { value: T; label: ReactNode; activeClass?: string }[]
+  onChange: (v: T) => void
+}) {
+  const name = useId()
+  return (
+    <fieldset>
+      <legend className="sr-only">{label}</legend>
+      <div className="grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
+        {options.map((o) => {
+          const active = o.value === value
+          return (
+            <label
+              key={o.value}
+              className={`flex min-h-10 cursor-pointer items-center justify-center rounded-lg px-2 text-sm font-medium transition
+                has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-600
+                ${active
+                  ? (o.activeClass ?? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white')
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
+            >
+              <input type="radio" name={name} className="sr-only" checked={active} onChange={() => onChange(o.value)} />
+              {o.label}
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
+  )
+}
+
+/** Estado vacío con guía de primer uso. */
+export function EmptyState({
+  icon, title, children, action,
+}: { icon: string; title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-600">
+      <span className="text-4xl" aria-hidden>{icon}</span>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      {children && <div className="max-w-sm text-sm text-slate-600 dark:text-slate-300">{children}</div>}
+      {action}
     </div>
   )
 }

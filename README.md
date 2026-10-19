@@ -10,7 +10,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Modelo de datos, RLS, autenticación | ✅ |
-| 2 | Cuentas y transacciones | ⏳ |
+| 2 | Cuentas y transacciones | ✅ |
 | 3 | Categorías y presupuestos | ⏳ |
 | 4 | Dashboard y gráficos | ⏳ |
 | 5 | PWA, exportación, despliegue y keep-alive | ⏳ |
@@ -26,14 +26,27 @@ scripts/
   seed.mjs               Crea 3 usuarios de prueba con datos distintos
   test-isolation.mjs     Pruebas automáticas de aislamiento entre usuarios
 src/
-  lib/supabase.ts        Cliente Supabase (anon key, flujo PKCE)
-  lib/format.ts          Formato CLP y fechas en America/Santiago
-  lib/errors.ts          Mensajes de error en español
+  types.ts               Tipos de las tablas (actualizar si cambia el SQL)
+  lib/                   supabase (cliente), format (CLP), dates (meses), errors,
+                         events (recarga automática), icons (emoji de categorías)
+  hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
+  data/                  Única capa que habla con Supabase (accounts, categories, transactions)
+  context/               RefData (cuentas y categorías globales), Month (mes seleccionado)
   auth/AuthProvider.tsx  Sesión global + detección de recuperación de contraseña
-  components/            UI base, Turnstile, formulario de contraseña, AppShell
-  pages/auth/            Login, registro, olvidé mi contraseña, restablecer
-  pages/                 Inicio, Ajustes (cambio de contraseña, eliminar cuenta), Privacidad
+  components/            UI base, Modal (<dialog>), Feedback (confirmar/toast),
+                         AmountInput, MonthSelector, AppShell (sidebar + barra inferior)
+  features/accounts/     Página de cuentas y formulario
+  features/transactions/ Drawer de registro rápido, listado, filtros
+  pages/                 Auth, Inicio, Ajustes, Privacidad
 ```
+
+### Cómo fluyen los datos
+
+1. Una vista llama a `useQuery(() => listX(...), deps, ['transactions'])`.
+2. Las mutaciones (`createTransaction`, etc.) en `data/` llaman a `emitChange('transactions')`.
+3. Todas las vistas suscritas a ese tópico se recargan solas (lista, saldos, inicio).
+
+Así no se necesita una librería de caché y agregar una vista nueva es solo usar `useQuery`.
 
 ## Modelo de datos
 
@@ -63,6 +76,21 @@ Decisiones clave:
   nuevas migraciones `0002_...sql` siguiendo el mismo patrón (`user_id default auth.uid()`, RLS de
   4 políticas, FKs compuestas). Para la importación con detección de duplicados se agregará una columna
   `import_hash` con índice único parcial en `transactions`.
+
+## Funcionalidades
+
+**Cuentas** (`/#/cuentas`): efectivo, banco, ahorro y tarjeta de crédito con saldo actual calculado.
+Las tarjetas muestran deuda, cupo disponible (barra ámbar sobre el 80%), día de cierre y de pago.
+Una cuenta con movimientos no se puede eliminar, pero sí archivar. El pago de la tarjeta se
+registra como **transferencia** banco → tarjeta.
+
+**Movimientos** (`/#/movimientos`): ingreso, gasto y transferencia, agrupados por día. Filtros por
+mes (o rango de fechas), tipo, cuenta, categoría, etiqueta y texto en la nota. Tocar un movimiento
+abre la edición, con opción de eliminarlo (con confirmación).
+
+**Registro rápido** (botón `+ Nueva transacción`): el monto queda enfocado con teclado numérico,
+la categoría se elige con un toque, la cuenta recuerda la última usada y la fecha parte en "Hoy".
+Nota y etiquetas van en "Más detalles".
 
 ## Seguridad
 
