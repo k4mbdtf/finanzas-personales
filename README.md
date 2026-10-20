@@ -396,5 +396,9 @@ correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commi
   (normalmente no hace falta: el HTML se pide siempre a la red primero, y al abrir la app con
   internet el SW borra del caché los JS/CSS que ya no están en `asset-manifest.json`, la lista de
   archivos del build que genera Vite).
+- **Cliente de Supabase:** `src/lib/supabase.ts` usa solo `@supabase/auth-js` y `@supabase/postgrest-js`
+  (no `createClient()`, que trae realtime, storage y functions: ~28 kB gzip más). Si algún día se
+  necesita Realtime o Storage, vuelve a `createClient()` de `@supabase/supabase-js` (hoy solo en
+  `devDependencies`, para los scripts). Los gráficos del inicio se cargan en diferido.
 - **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run preview` ·
   `npm run test:unit` · `npm run test:sql` · `npm run seed` · `npm run test:isolation`.

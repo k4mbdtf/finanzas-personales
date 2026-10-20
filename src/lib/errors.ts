@@ -1,5 +1,6 @@
 // Traduce errores de Supabase a mensajes claros en español.
-import type { AuthError, PostgrestError } from '@supabase/supabase-js'
+import type { AuthError } from '@supabase/auth-js'
+import type { PostgrestError } from '@supabase/postgrest-js'
 
 const AUTH_MESSAGES: Record<string, string> = {
   invalid_credentials: 'Correo o contraseña incorrectos.',
