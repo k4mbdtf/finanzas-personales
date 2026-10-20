@@ -4,10 +4,11 @@ import { useState, type FormEvent } from 'react'
 import { useRefData } from '@/context/RefData'
 import { createPlan, deletePlan, updatePlan, type PlanWithStatus } from '@/data/installments'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
+import { CalendarClock, Trash2 } from 'lucide-react'
 import { AmountInput } from '@/components/AmountInput'
 import { CategoryPicker } from '@/components/CategoryPicker'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, Field, Select } from '@/components/ui'
+import { Alert, Button, Checkbox, Field, Select } from '@/components/ui'
 
 const QUICK_COUNTS = [3, 6, 12, 24]
 
@@ -116,25 +117,23 @@ export function InstallmentForm({ plan, onDone }: { plan?: PlanWithStatus; onDon
             {cards.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
 
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Field label="Número de cuotas" inputMode="numeric" value={count} error={show('count')}
               onChange={(e) => setCount(e.target.value.replace(/\D/g, '').slice(0, 2))} />
             <div className="flex gap-2">
               {QUICK_COUNTS.map((q) => (
                 <button key={q} type="button" aria-pressed={n === q} onClick={() => setCount(String(q))}
-                  className={`min-h-9 rounded-lg border px-3 text-sm font-medium ${n === q
-                    ? 'border-teal-600 bg-teal-50 text-teal-900 dark:bg-teal-900/40 dark:text-teal-100'
-                    : 'border-slate-300 dark:border-slate-600'}`}>
+                  className={`pressable min-h-9 min-w-12 rounded-sm border px-3 text-sm font-semibold tabular-nums transition-colors duration-200 ${n === q
+                    ? 'border-accent bg-accent text-on-accent'
+                    : 'border-line-strong/45 bg-surface text-ink hover:bg-subtle'}`}>
                   {q}
                 </button>
               ))}
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4" checked={withInterest} onChange={(e) => setWithInterest(e.target.checked)} />
-            Tiene interés (sé el valor de cada cuota)
-          </label>
+          <Checkbox label="Tiene interés" hint="Usa esta opción si conoces el valor fijo de cada cuota."
+            checked={withInterest} onChange={setWithInterest} />
           {withInterest
             ? <AmountInput label="Valor de cada cuota" value={cuota} onChange={setCuota} error={show('amount')} big />
             : <AmountInput label="Monto total de la compra" value={total} onChange={setTotal} error={show('amount')} big />}
@@ -143,20 +142,24 @@ export function InstallmentForm({ plan, onDone }: { plan?: PlanWithStatus; onDon
             hint="Normalmente la fecha de la compra o la de tu próxima facturación."
             onChange={(e) => setFirstDate(e.target.value)} />
 
-          {preview && <p className="rounded-lg bg-slate-100 p-3 text-sm font-medium dark:bg-slate-900" aria-live="polite">{preview}</p>}
+          {preview && (
+            <p key={preview} className="animate-fade flex items-center gap-2 rounded-sm bg-subtle px-3.5 py-3 text-sm font-medium" aria-live="polite">
+              <CalendarClock size={17} strokeWidth={2} className="shrink-0 text-muted" aria-hidden />{preview}
+            </p>
+          )}
         </>
       )}
 
       <CategoryPicker categories={expenseCats} value={categoryId} onChange={setCategoryId} allowNone />
 
       {!plan && (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-muted">
           El cupo de la tarjeta se descuenta completo hoy, y cada cuota cuenta como gasto en su mes (presupuestos y resumen).
         </p>
       )}
 
-      <Button type="submit" loading={busy}>{plan ? 'Guardar cambios' : 'Registrar compra en cuotas'}</Button>
-      {plan && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar compra y sus cuotas</Button>}
+      <Button type="submit" size="lg" loading={busy}>{plan ? 'Guardar cambios' : 'Registrar compra en cuotas'}</Button>
+      {plan && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar compra y sus cuotas</Button>}
     </form>
   )
 }

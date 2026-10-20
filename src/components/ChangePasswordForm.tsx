@@ -41,7 +41,7 @@ export function ChangePasswordForm({ onDone }: { onDone?: () => void }) {
         value={password} onChange={(e) => setPassword(e.target.value)} />
       <Field label="Repite la nueva contraseña" type="password" autoComplete="new-password" required
         error={confirmError} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      <Button type="submit" loading={busy} disabled={!password || !confirm || !!pwError || !!confirmError}>
+      <Button type="submit" size="lg" loading={busy} disabled={!password || !confirm || !!pwError || !!confirmError}>
         Guardar contraseña
       </Button>
     </form>

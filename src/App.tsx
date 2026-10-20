@@ -6,7 +6,7 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-
 import { AuthProvider, useAuth } from '@/auth/AuthProvider'
 import { isConfigured } from '@/lib/supabase'
 import { AppShell } from '@/components/AppShell'
-import { Alert, FullScreenLoader, Spinner } from '@/components/ui'
+import { Alert, FullScreenLoader, Loading } from '@/components/ui'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
@@ -28,7 +28,7 @@ const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'))
 const ImportPage = lazy(() => import('@/features/import/ImportPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 
-const page = (el: ReactNode) => <Suspense fallback={<Spinner label="Cargando…" />}>{el}</Suspense>
+const page = (el: ReactNode) => <Suspense fallback={<Loading label="Cargando…" />}>{el}</Suspense>
 
 /** Solo usuarios con sesión. Si viene de un enlace de recuperación, lo manda a /restablecer. */
 function RequireAuth() {

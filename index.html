@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Finanzas personales: cuentas, movimientos, presupuestos y resumen mensual." />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" content="#f5f1e8" />
     <title>Mis Finanzas</title>
 
     <!-- PWA (las rutas son relativas para respetar el base path de GitHub Pages) -->
@@ -22,6 +22,7 @@
         var t = localStorage.getItem('finanzas.theme') || 'system'
         var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.classList.toggle('dark', dark)
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#111111' : '#f5f1e8')
       } catch (e) {}
     </script>
   </head>

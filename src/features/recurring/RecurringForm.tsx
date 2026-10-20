@@ -4,6 +4,7 @@
 //  * Al editar: se muestra la "próxima fecha". Si cambias la frecuencia o esa
 //    fecha, la regla se reprograma desde ahí (no toca lo ya generado).
 import { useMemo, useState, type FormEvent } from 'react'
+import { CalendarClock, Trash2, TriangleAlert } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { parseTags } from '@/data/transactions'
 import { createRule, deleteRule, materializeRecurring, updateRule } from '@/data/recurring'
@@ -129,9 +130,9 @@ export function RecurringForm({ rule, onDone }: { rule?: RecurringRule; onDone: 
 
       <Segmented<TxType> label="Tipo" value={type} onChange={changeType}
         options={[
-          { value: 'expense', label: '− Gasto', activeClass: 'bg-red-700 text-white shadow-sm' },
-          { value: 'income', label: '+ Ingreso', activeClass: 'bg-green-700 text-white shadow-sm' },
-          { value: 'transfer', label: '⇄ Transferencia', activeClass: 'bg-slate-700 text-white shadow-sm' },
+          { value: 'expense', label: '− Gasto', tone: 'neg' },
+          { value: 'income', label: '+ Ingreso', tone: 'pos' },
+          { value: 'transfer', label: 'Transferencia', tone: 'accent' },
         ]} />
 
       <AmountInput label="Monto" value={amount} onChange={setAmount} autoFocus={!rule} big error={show('amount')} />
@@ -174,23 +175,27 @@ export function RecurringForm({ rule, onDone }: { rule?: RecurringRule; onDone: 
       </div>
 
       {preview.length > 0 && (
-        <div className="rounded-lg bg-slate-100 p-3 text-sm dark:bg-slate-900" aria-live="polite">
-          <p className="font-medium">{frequencyLabel(frequency, k, date)}</p>
-          <p className="text-slate-600 dark:text-slate-300">Próximas: {preview.map(formatDate).join(' · ')}</p>
-          {date < today && (!rule || date !== rule.next_date) && (
-            <p className="mt-1 text-amber-800 dark:text-amber-300">
-              <span aria-hidden>⚠️ </span>La fecha es pasada: se registrarán los movimientos desde esa fecha hasta hoy.
-              Si ya los anotaste a mano, elige la próxima fecha que viene.
-            </p>
-          )}
+        <div className="flex gap-2.5 rounded-sm bg-subtle px-3.5 py-3 text-sm" aria-live="polite">
+          <CalendarClock size={17} strokeWidth={2} className="mt-0.5 shrink-0 text-muted" aria-hidden />
+          <div>
+            <p className="font-medium">{frequencyLabel(frequency, k, date)}</p>
+            <p className="text-soft">Próximas: {preview.map(formatDate).join(' · ')}</p>
+            {date < today && (!rule || date !== rule.next_date) && (
+              <p className="animate-fade mt-1.5 flex items-start gap-1.5 text-warn">
+                <TriangleAlert size={15} strokeWidth={2.25} className="mt-0.5 shrink-0" aria-hidden />
+                <span>La fecha es pasada: se registrarán los movimientos desde esa fecha hasta hoy.
+                  Si ya los anotaste a mano, elige la próxima fecha que viene.</span>
+              </p>
+            )}
+          </div>
         </div>
       )}
 
       <Field label="Etiquetas (opcional)" placeholder="Ej: casa, suscripción" hint="Sepáralas con comas."
         value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
 
-      <Button type="submit" loading={busy}>{rule ? 'Guardar cambios' : 'Crear recurrente'}</Button>
-      {rule && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar recurrente</Button>}
+      <Button type="submit" size="lg" loading={busy}>{rule ? 'Guardar cambios' : 'Crear recurrente'}</Button>
+      {rule && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar recurrente</Button>}
     </form>
   )
 }

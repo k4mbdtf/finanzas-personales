@@ -7,10 +7,12 @@ import { useState, type FormEvent } from 'react'
 import { createAccount, deleteAccount, updateAccount } from '@/data/accounts'
 import { AppError } from '@/lib/errors'
 import { ACCOUNT_TYPES, COLORS } from '@/lib/icons'
+import { Trash2 } from 'lucide-react'
 import { AmountInput } from '@/components/AmountInput'
+import { ACCOUNT_ICONS } from '@/components/icons'
 import { ColorPicker } from '@/components/Pickers'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, Field } from '@/components/ui'
+import { Alert, Button, Checkbox, Field } from '@/components/ui'
 import type { Account, AccountInput, AccountType } from '@/types'
 
 const AMOUNT_LABEL: Record<AccountType, string> = {
@@ -128,21 +130,23 @@ export function AccountForm({
         placeholder={isLoan ? 'Ej: Crédito de consumo' : isReceivable ? 'Ej: Préstamo a Juan' : 'Ej: Cuenta RUT, Visa Banco X'}
         value={name} onChange={(e) => setName(e.target.value)} />
 
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Tipo</span>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-[0.8125rem] font-medium text-soft">Tipo</legend>
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(ACCOUNT_TYPES) as AccountType[]).map((t) => (
-            <label key={t}
-              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-600 ${
-                type === t
-                  ? 'border-teal-600 bg-teal-50 font-semibold dark:bg-teal-900/30'
-                  : 'border-slate-300 dark:border-slate-600'}`}>
-              <input type="radio" name="account-type" className="sr-only" checked={type === t} onChange={() => setType(t)} />
-              <span aria-hidden>{ACCOUNT_TYPES[t].icon}</span>{ACCOUNT_TYPES[t].label}
-            </label>
-          ))}
+          {(Object.keys(ACCOUNT_TYPES) as AccountType[]).map((t) => {
+            const Icon = ACCOUNT_ICONS[t]
+            return (
+              <label key={t}
+                className={`pressable flex min-h-12 cursor-pointer items-center gap-2.5 rounded-sm border px-3 text-sm transition-colors duration-200
+                  has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+                  type === t ? 'border-ink bg-subtle font-semibold text-ink' : 'border-line bg-surface text-soft hover:text-ink'}`}>
+                <input type="radio" name="account-type" className="sr-only" checked={type === t} onChange={() => setType(t)} />
+                <Icon size={18} strokeWidth={type === t ? 2 : 1.75} aria-hidden />{ACCOUNT_TYPES[t].label}
+              </label>
+            )
+          })}
         </div>
-      </div>
+      </fieldset>
 
       {(isLoan || isReceivable) && (
         <Field label={isLoan ? '¿A quién le debes? (banco o persona)' : '¿Quién te debe?'} maxLength={80}
@@ -152,10 +156,7 @@ export function AccountForm({
 
       <AmountInput label={AMOUNT_LABEL[type]} value={initial} onChange={setInitial} />
       {!isDebt && !isReceivable && (
-        <label className="-mt-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input type="checkbox" className="size-4" checked={negative} onChange={(e) => setNegative(e.target.checked)} />
-          El saldo inicial es negativo (sobregiro / línea de crédito)
-        </label>
+        <Checkbox label="El saldo inicial es negativo (sobregiro / línea de crédito)" checked={negative} onChange={setNegative} />
       )}
 
       {isCard && (
@@ -199,14 +200,11 @@ export function AccountForm({
       <ColorPicker value={color} onChange={setColor} />
 
       {account && (
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input type="checkbox" className="size-4" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-          Archivar (ocultar de los formularios; conserva su historial)
-        </label>
+        <Checkbox label="Archivar" hint="Se oculta de los formularios y conserva su historial." checked={archived} onChange={setArchived} />
       )}
 
-      <Button type="submit" loading={busy}>{account ? 'Guardar cambios' : 'Crear cuenta'}</Button>
-      {account && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar cuenta</Button>}
+      <Button type="submit" size="lg" loading={busy}>{account ? 'Guardar cambios' : 'Crear cuenta'}</Button>
+      {account && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar cuenta</Button>}
     </form>
   )
 }

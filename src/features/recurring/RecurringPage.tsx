@@ -3,17 +3,18 @@ import { useRefData } from '@/context/RefData'
 import { listRules, materializeRecurring, updateRule } from '@/data/recurring'
 import { useQuery } from '@/hooks/useQuery'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
-import { iconFor } from '@/lib/icons'
+import { CalendarClock, Pause, Play, Plus, Repeat } from 'lucide-react'
 import { firstOnOrAfter, frequencyLabel } from '@/lib/recurring'
 import { useToast } from '@/components/Feedback'
+import { CategoryIcon, IconTile, TransferIcon } from '@/components/icons'
 import { Modal } from '@/components/Modal'
-import { Alert, Button, EmptyState, Spinner } from '@/components/ui'
+import { Alert, Button, EmptyState, Loading, PageHeader } from '@/components/ui'
 import type { RecurringRule } from '@/types'
 import { RecurringForm } from './RecurringForm'
 
 const SIGN = {
-  income: ['+', 'text-green-700 dark:text-green-400'],
-  expense: ['−', 'text-red-700 dark:text-red-400'],
+  income: ['+', 'text-pos'],
+  expense: ['−', 'text-neg'],
   transfer: ['', ''],
 } as const
 
@@ -68,29 +69,28 @@ export default function RecurringPage() {
       ? `${accountById.get(r.account_id)?.name ?? ''} → ${accountById.get(r.to_account_id ?? '')?.name ?? ''}`
       : accountById.get(r.account_id)?.name ?? ''
     return (
-      <li key={r.id} className="border-b border-slate-100 last:border-0 dark:border-slate-700">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={() => setEditing(r)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full text-lg" aria-hidden
-              style={{ backgroundColor: `${cat?.color ?? '#64748b'}26` }}>
-              {r.type === 'transfer' ? '⇄' : iconFor(cat?.icon)}
-            </span>
+      <li key={r.id} className="border-b border-line last:border-0">
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <button onClick={() => setEditing(r)} className="pressable flex min-w-0 flex-1 items-center gap-3.5 text-left">
+            {r.type === 'transfer' ? <IconTile icon={TransferIcon} /> : <CategoryIcon name={cat?.icon} color={cat?.color} />}
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{title}</span>
-              <span className="line-clamp-2 block text-xs text-slate-500 dark:text-slate-400">
+              <span className="line-clamp-2 block text-[0.8125rem] text-muted">
                 {frequencyLabel(r.frequency, r.interval_count, r.start_date)} · {account}
               </span>
-              <span className="block text-xs text-slate-500 dark:text-slate-400">
-                {r.active ? <>Próximo: {formatDate(r.next_date)}</> : <>⏸ Pausado</>}
+              <span className="flex items-center gap-1 text-xs text-muted">
+                {r.active
+                  ? <><CalendarClock size={13} strokeWidth={2} aria-hidden /> Próximo: {formatDate(r.next_date)}</>
+                  : <><Pause size={13} strokeWidth={2} aria-hidden /> Pausado</>}
                 {r.end_date && <> · hasta {formatDate(r.end_date)}</>}
               </span>
             </span>
-            <span className={`shrink-0 font-semibold tabular-nums ${cls}`}>{sign}{formatCLP(r.amount)}</span>
+            <span className={`shrink-0 text-[0.9375rem] font-semibold tabular-nums ${cls}`}>{sign}{formatCLP(r.amount)}</span>
           </button>
           <button onClick={() => toggle(r)}
-            className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
-            aria-label={r.active ? `Pausar ${title}` : `Reactivar ${title}`}>
-            {r.active ? '⏸ Pausar' : '▶ Activar'}
+            className="pressable grid size-10 shrink-0 place-items-center rounded-full border border-line-strong/45 text-soft hover:bg-subtle hover:text-ink"
+            aria-label={r.active ? `Pausar ${title}` : `Reactivar ${title}`} title={r.active ? 'Pausar' : 'Reactivar'}>
+            {r.active ? <Pause size={16} strokeWidth={2} aria-hidden /> : <Play size={16} strokeWidth={2} aria-hidden />}
           </button>
         </div>
       </li>
@@ -98,37 +98,34 @@ export default function RecurringPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Recurrentes</h1>
-        {rules.length > 0 && <Button onClick={() => setEditing('new')}>+ Nuevo</Button>}
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader title="Recurrentes"
+        subtitle={rules.length > 0 && (
+          <>Efecto mensual estimado:{' '}
+            <strong className={monthlyNet < 0 ? 'text-neg' : 'text-pos'}>
+              {monthlyNet < 0 ? '−' : '+'}{formatCLP(Math.abs(monthlyNet))}
+            </strong>{' '}(sin transferencias)</>
+        )}
+        action={rules.length > 0 && <Button icon={Plus} onClick={() => setEditing('new')}>Nuevo</Button>} />
 
       {q.error && <Alert>{q.error}</Alert>}
-      {q.loading && !q.data ? <Spinner label="Cargando recurrentes…" /> : rules.length === 0 ? (
-        <EmptyState icon="🔁" title="Automatiza lo que se repite"
-          action={<Button onClick={() => setEditing('new')}>+ Nuevo recurrente</Button>}>
+      {q.loading && !q.data ? <Loading label="Cargando recurrentes…" /> : rules.length === 0 ? (
+        <EmptyState icon={Repeat} title="Automatiza lo que se repite"
+          action={<Button icon={Plus} onClick={() => setEditing('new')}>Nuevo recurrente</Button>}>
           Sueldo, arriendo, cuentas, suscripciones o el ahorro mensual: créalos una vez y se registrarán solos en
           su fecha cada vez que abras la app.
         </EmptyState>
       ) : (
         <>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Efecto mensual estimado de los activos:{' '}
-            <strong className={monthlyNet < 0 ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}>
-              {monthlyNet < 0 ? '−' : '+'}{formatCLP(Math.abs(monthlyNet))}
-            </strong>{' '}
-            (sin transferencias)
-          </p>
           {active.length > 0 && (
-            <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+            <ul className="card stagger overflow-hidden">
               {active.map(row)}
             </ul>
           )}
           {paused.length > 0 && (
             <section>
-              <h2 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Pausados o terminados</h2>
-              <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white opacity-80 dark:border-slate-700 dark:bg-slate-800">
+              <h2 className="label-caps mb-2 px-1">Pausados o terminados</h2>
+              <ul className="card stagger overflow-hidden opacity-80">
                 {paused.map(row)}
               </ul>
             </section>

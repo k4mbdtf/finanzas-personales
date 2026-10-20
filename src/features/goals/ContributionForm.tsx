@@ -1,11 +1,12 @@
 // Abonar o retirar de una meta (manual) + historial de abonos.
 import { useState, type FormEvent } from 'react'
+import { X } from 'lucide-react'
 import { addContribution, deleteContribution, listContributions } from '@/data/goals'
 import { useQuery } from '@/hooks/useQuery'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
 import { AmountInput } from '@/components/AmountInput'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, Field, Segmented, Spinner } from '@/components/ui'
+import { Alert, Button, Field, Segmented, Loading } from '@/components/ui'
 import type { GoalWithProgress } from '@/types'
 
 export function ContributionForm({ goal, onDone }: { goal: GoalWithProgress; onDone: () => void }) {
@@ -57,26 +58,26 @@ export function ContributionForm({ goal, onDone }: { goal: GoalWithProgress; onD
           <Field label="Fecha" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <Field label="Nota (opcional)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
-        <Button type="submit" loading={busy}>{kind === 'in' ? 'Registrar abono' : 'Registrar retiro'}</Button>
+        <Button type="submit" size="lg" loading={busy}>{kind === 'in' ? 'Registrar abono' : 'Registrar retiro'}</Button>
       </form>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Historial</h3>
-        {history.loading && !history.data ? <Spinner /> : !history.data?.length ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Aún no hay abonos.</p>
+        <h3 className="label-caps mb-2">Historial</h3>
+        {history.loading && !history.data ? <Loading /> : !history.data?.length ? (
+          <p className="text-sm text-muted">Aún no hay abonos.</p>
         ) : (
-          <ul className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <ul className="max-h-60 overflow-y-auto overscroll-contain rounded-sm border border-line">
             {history.data.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-0 dark:border-slate-700">
+              <li key={c.id} className="animate-fade flex items-center gap-3 border-b border-line px-3 py-2.5 text-sm last:border-0">
                 <span className="flex-1">
                   <span className="block">{formatDate(c.date)}</span>
-                  {c.note && <span className="block text-xs text-slate-500 dark:text-slate-400">{c.note}</span>}
+                  {c.note && <span className="block text-xs text-muted">{c.note}</span>}
                 </span>
-                <span className={`font-semibold tabular-nums ${c.amount < 0 ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                <span className={`font-semibold tabular-nums ${c.amount < 0 ? 'text-neg' : 'text-pos'}`}>
                   {c.amount < 0 ? '−' : '+'}{formatCLP(Math.abs(c.amount))}
                 </span>
-                <button onClick={() => remove(c.id)} className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  aria-label={`Eliminar registro del ${formatDate(c.date)}`}>✕</button>
+                <button onClick={() => remove(c.id)} className="pressable grid size-8 place-items-center rounded-full text-muted hover:bg-subtle hover:text-neg"
+                  aria-label={`Eliminar registro del ${formatDate(c.date)}`}><X size={15} strokeWidth={2} aria-hidden /></button>
               </li>
             ))}
           </ul>

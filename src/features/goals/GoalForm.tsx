@@ -1,13 +1,14 @@
 // Crear / editar una meta de ahorro.
 // Opcional: vincularla a una cuenta (el avance = saldo de esa cuenta).
 import { useState, type FormEvent } from 'react'
+import { Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { createGoal, deleteGoal, updateGoal } from '@/data/goals'
 import { COLORS, isLiability } from '@/lib/icons'
 import { AmountInput } from '@/components/AmountInput'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { ColorPicker, IconPicker } from '@/components/Pickers'
-import { Alert, Button, Field, Select } from '@/components/ui'
+import { Alert, Button, Checkbox, Field, Select } from '@/components/ui'
 import type { Goal } from '@/types'
 
 export function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
@@ -85,7 +86,7 @@ export function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) 
         <option value="">Con abonos manuales</option>
         {linkable.map((a) => <option key={a.id} value={a.id}>Saldo de la cuenta: {a.name}</option>)}
       </Select>
-      <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+      <p className="-mt-2 text-xs text-muted">
         {accountId
           ? 'El avance será el saldo actual de esa cuenta (ideal para una cuenta de ahorro dedicada).'
           : 'Registrarás abonos y retiros a mano. Son solo un registro: no mueven dinero entre tus cuentas.'}
@@ -93,13 +94,10 @@ export function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) 
       <IconPicker value={icon} onChange={setIcon} color={color} />
       <ColorPicker value={color} onChange={setColor} />
       {goal && (
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input type="checkbox" className="size-4" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-          Archivar meta
-        </label>
+        <Checkbox label="Archivar meta" checked={archived} onChange={setArchived} />
       )}
-      <Button type="submit" loading={busy}>{goal ? 'Guardar cambios' : 'Crear meta'}</Button>
-      {goal && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar meta</Button>}
+      <Button type="submit" size="lg" loading={busy}>{goal ? 'Guardar cambios' : 'Crear meta'}</Button>
+      {goal && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar meta</Button>}
     </form>
   )
 }

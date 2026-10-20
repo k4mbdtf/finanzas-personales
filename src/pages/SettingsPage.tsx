@@ -1,5 +1,7 @@
-import { useState, type FormEvent } from 'react'
+// Ajustes, agrupados como en la app de Configuración de iOS.
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ChevronRight, Download, FileJson, FileSpreadsheet, Monitor, Moon, Shield, Sun, Tags, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/auth/AuthProvider'
 import { exportJSON, exportTransactionsCSV } from '@/data/export'
@@ -7,40 +9,70 @@ import { useInstallPrompt } from '@/lib/pwa'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
 import { ChangePasswordForm } from '@/components/ChangePasswordForm'
 import { useToast } from '@/components/Feedback'
-import { Alert, Button, Card, Field, Segmented } from '@/components/ui'
+import { IconTile } from '@/components/icons'
+import { Alert, Button, Card, Field, PageHeader, Segmented } from '@/components/ui'
 
 const CONFIRM_WORD = 'ELIMINAR'
 
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="label-caps px-1">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 export default function SettingsPage() {
   const { session } = useAuth()
+  const email = session?.user.email ?? ''
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">Ajustes</h1>
+    <div className="flex max-w-2xl flex-col gap-8">
+      <PageHeader title="Ajustes" />
 
-      <Card>
-        <h2 className="mb-1 text-lg font-semibold">Mi cuenta</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{session?.user.email}</p>
+      <Card pad="sm" className="flex items-center gap-4 md:p-5">
+        <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-accent text-lg font-bold text-on-accent" aria-hidden>
+          {email.charAt(0).toUpperCase() || '?'}
+        </span>
+        <div className="min-w-0">
+          <p className="label-caps">Mi cuenta</p>
+          <p className="truncate font-medium">{email}</p>
+        </div>
       </Card>
 
-      <Link to="/categorias"
-        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 font-semibold shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800">
-        <span><span aria-hidden>🏷️ </span>Categorías</span>
-        <span className="text-sm font-normal text-slate-500 dark:text-slate-400">Colores, íconos y personalizadas ›</span>
-      </Link>
+      <Group title="Preferencias">
+        <AppearanceCard />
+        <Link to="/categorias"
+          className="card pressable flex items-center gap-3.5 px-4 py-3.5 transition-[border-color] duration-200 hover:border-line-strong/40">
+          <IconTile icon={Tags} />
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Categorías</span>
+            <span className="block text-[0.8125rem] text-muted">Colores, íconos y categorías propias</span>
+          </span>
+          <ChevronRight size={18} strokeWidth={2} className="text-muted" aria-hidden />
+        </Link>
+      </Group>
 
-      <AppearanceCard />
       <InstallCard />
-      <ExportCard />
 
-      <Card>
-        <h2 className="mb-4 text-lg font-semibold">Cambiar contraseña</h2>
-        <ChangePasswordForm />
-      </Card>
+      <Group title="Tus datos">
+        <ExportCard />
+      </Group>
 
-      <DeleteAccountCard />
+      <Group title="Seguridad">
+        <Card>
+          <h3 className="mb-4 font-semibold">Cambiar contraseña</h3>
+          <ChangePasswordForm />
+        </Card>
+      </Group>
 
-      <p className="text-center text-sm">
-        <Link to="/privacidad" className="text-teal-700 underline dark:text-teal-400">Privacidad: qué datos guardamos</Link>
+      <Group title="Zona de riesgo">
+        <DeleteAccountCard />
+      </Group>
+
+      <p className="flex items-center justify-center gap-1.5 text-sm">
+        <Shield size={15} strokeWidth={2} className="text-muted" aria-hidden />
+        <Link to="/privacidad" className="link">Privacidad: qué datos guardamos</Link>
       </p>
     </div>
   )
@@ -49,16 +81,16 @@ export default function SettingsPage() {
 function AppearanceCard() {
   const [pref, setPref] = useState<ThemePref>(getThemePref)
   return (
-    <Card>
-      <h2 className="mb-3 text-lg font-semibold">Apariencia</h2>
+    <Card pad="sm" className="md:p-5">
+      <h3 className="mb-3 font-semibold">Apariencia</h3>
       <Segmented<ThemePref>
         label="Tema"
         value={pref}
         onChange={(v) => { setPref(v); setThemePref(v) }}
         options={[
-          { value: 'system', label: '🖥️ Sistema' },
-          { value: 'light', label: '☀️ Claro' },
-          { value: 'dark', label: '🌙 Oscuro' },
+          { value: 'system', label: 'Sistema', icon: Monitor },
+          { value: 'light', label: 'Claro', icon: Sun },
+          { value: 'dark', label: 'Oscuro', icon: Moon },
         ]}
       />
     </Card>
@@ -69,23 +101,25 @@ function InstallCard() {
   const { installed, canPrompt, ios, install } = useInstallPrompt()
   if (installed) return null
   return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Instalar la app</h2>
-      {canPrompt ? (
-        <>
-          <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">Agrégala a tu pantalla de inicio para abrirla como una app.</p>
-          <Button onClick={install}>📲 Instalar</Button>
-        </>
-      ) : ios ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          En Safari toca <strong>Compartir</strong> <span aria-hidden>⎋</span> y luego <strong>Agregar a inicio</strong>.
-        </p>
-      ) : (
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Desde el menú del navegador elige <strong>Instalar aplicación</strong> o <strong>Agregar a la pantalla de inicio</strong>.
-        </p>
-      )}
-    </Card>
+    <Group title="Aplicación">
+      <Card pad="sm" className="md:p-5">
+        <h3 className="mb-1 font-semibold">Instalar la app</h3>
+        {canPrompt ? (
+          <>
+            <p className="mb-4 text-sm text-soft">Agrégala a tu pantalla de inicio para abrirla como una app.</p>
+            <Button icon={Download} onClick={install}>Instalar</Button>
+          </>
+        ) : ios ? (
+          <p className="text-sm leading-relaxed text-soft">
+            En Safari toca <strong>Compartir</strong> y luego <strong>Agregar a inicio</strong>.
+          </p>
+        ) : (
+          <p className="text-sm leading-relaxed text-soft">
+            Desde el menú del navegador elige <strong>Instalar aplicación</strong> o <strong>Agregar a la pantalla de inicio</strong>.
+          </p>
+        )}
+      </Card>
+    </Group>
   )
 }
 
@@ -105,17 +139,15 @@ function ExportCard() {
   }
 
   return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Exportar mis datos</h2>
-      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-        Descarga tu información. Solo incluye tus propios datos.
-      </p>
+    <Card pad="sm" className="md:p-5">
+      <h3 className="mb-1 font-semibold">Exportar mis datos</h3>
+      <p className="mb-4 text-sm text-soft">Descarga tu información. Solo incluye tus propios datos.</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Button variant="secondary" loading={busy === 'csv'} disabled={busy !== null} onClick={() => run('csv')}>
-          📄 Movimientos (CSV para Excel)
+        <Button variant="secondary" icon={FileSpreadsheet} loading={busy === 'csv'} disabled={busy !== null} onClick={() => run('csv')}>
+          Movimientos (CSV)
         </Button>
-        <Button variant="secondary" loading={busy === 'json'} disabled={busy !== null} onClick={() => run('json')}>
-          🗂️ Respaldo completo (JSON)
+        <Button variant="secondary" icon={FileJson} loading={busy === 'json'} disabled={busy !== null} onClick={() => run('json')}>
+          Respaldo completo (JSON)
         </Button>
       </div>
     </Card>
@@ -144,17 +176,17 @@ function DeleteAccountCard() {
   }
 
   return (
-    <Card className="border-red-300 dark:border-red-800">
-      <h2 className="mb-2 text-lg font-semibold text-red-800 dark:text-red-300">Eliminar mi cuenta y todos mis datos</h2>
-      <p className="mb-4 text-sm text-slate-700 dark:text-slate-300">
-        Se borrarán de forma permanente tu usuario, cuentas, transacciones, categorías y presupuestos.
+    <Card className="border-neg/30">
+      <h3 className="mb-2 font-semibold text-neg">Eliminar mi cuenta y todos mis datos</h3>
+      <p className="mb-4 text-sm leading-relaxed text-soft">
+        Se borrarán de forma permanente tu usuario, cuentas, movimientos, categorías, presupuestos, metas y deudas.
         Esta acción <strong>no se puede deshacer</strong>. Te recomendamos exportar tus datos antes.
       </p>
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         {error && <Alert>{error}</Alert>}
         <Field label={`Escribe ${CONFIRM_WORD} para confirmar`} autoComplete="off" autoCapitalize="characters"
           value={word} onChange={(e) => setWord(e.target.value.toUpperCase())} />
-        <Button type="submit" variant="danger" loading={busy} disabled={word !== CONFIRM_WORD}>
+        <Button type="submit" variant="danger" icon={Trash2} loading={busy} disabled={word !== CONFIRM_WORD}>
           Eliminar definitivamente
         </Button>
       </form>

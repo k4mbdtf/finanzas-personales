@@ -1,7 +1,8 @@
 // Grilla de categorías para elegir con un toque. Se usa en movimientos,
 // recurrentes y compras en cuotas.
-import { iconFor } from '@/lib/icons'
+import { Ban } from 'lucide-react'
 import type { Category } from '@/types'
+import { CategoryIcon } from './icons'
 
 export function CategoryPicker({
   categories, value, onChange, error, label = 'Categoría', allowNone,
@@ -15,33 +16,27 @@ export function CategoryPicker({
   allowNone?: boolean
 }) {
   const chip = (active: boolean) =>
-    `flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-xs font-medium ${
-      active
-        ? 'border-transparent ring-2 ring-teal-600'
-        : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700'}`
+    `pressable flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-sm border px-1 py-2 text-xs font-medium transition-colors duration-200 ${
+      active ? 'border-ink bg-subtle text-ink' : 'border-line bg-surface text-soft hover:border-line-strong/50 hover:text-ink'}`
 
   return (
     <fieldset>
-      <legend className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">{label}</legend>
+      <legend className="mb-1.5 text-[0.8125rem] font-medium text-soft">{label}</legend>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
         {allowNone && (
           <button type="button" aria-pressed={value === null} onClick={() => onChange(null)} className={chip(value === null)}>
-            <span className="text-xl" aria-hidden>∅</span>
+            <span className="grid size-8 place-items-center rounded-lg bg-subtle text-muted" aria-hidden><Ban size={16} strokeWidth={1.75} /></span>
             <span>Sin categoría</span>
           </button>
         )}
-        {categories.map((c) => {
-          const active = c.id === value
-          return (
-            <button key={c.id} type="button" aria-pressed={active} onClick={() => onChange(c.id)}
-              className={chip(active)} style={active ? { backgroundColor: `${c.color}26` } : undefined}>
-              <span className="text-xl" aria-hidden>{iconFor(c.icon)}</span>
-              <span className="line-clamp-1">{c.name}</span>
-            </button>
-          )
-        })}
+        {categories.map((c) => (
+          <button key={c.id} type="button" aria-pressed={c.id === value} onClick={() => onChange(c.id)} className={chip(c.id === value)}>
+            <CategoryIcon name={c.icon} color={c.color} size="sm" />
+            <span className="line-clamp-1">{c.name}</span>
+          </button>
+        ))}
       </div>
-      {error && <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error}</p>}
+      {error && <p className="mt-1.5 text-sm text-neg">{error}</p>}
     </fieldset>
   )
 }

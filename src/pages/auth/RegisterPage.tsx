@@ -63,12 +63,12 @@ export default function RegisterPage() {
           value={password} onChange={(e) => setPassword(e.target.value)} />
         <Field label="Repite la contraseña" type="password" autoComplete="new-password" required
           error={confirmError} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-          <input type="checkbox" className="mt-1 size-4" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+        <label className="flex cursor-pointer items-start gap-3 text-sm text-soft">
+          <input type="checkbox" className="mt-0.5 size-[18px] shrink-0 cursor-pointer accent-[var(--accent)]" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
           <span>Leí la <Link to="/privacidad" className={linkCls}>política de privacidad</Link>.</span>
         </label>
         <Turnstile ref={captchaRef} onToken={setCaptcha} />
-        <Button type="submit" loading={busy}
+        <Button type="submit" size="lg" loading={busy}
           disabled={!email || !password || !!pwError || !!confirmError || !confirm || !accepted || (captchaEnabled && !captcha)}>
           Crear cuenta
         </Button>

@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { ListOrdered, Plus, Search, SearchX, SlidersHorizontal, X } from 'lucide-react'
 import { useMonth } from '@/context/Month'
 import { useRefData } from '@/context/RefData'
 import { listTags, listTransactions, type TxFilters } from '@/data/transactions'
 import { useDebounced, useQuery } from '@/hooks/useQuery'
 import { monthLabel, monthRange } from '@/lib/dates'
-import { Alert, Button, EmptyState, Field, Select, Spinner } from '@/components/ui'
+import { Alert, Button, Checkbox, EmptyState, Field, Loading, PageHeader, Select } from '@/components/ui'
 import type { TxType } from '@/types'
 import { TransactionList } from './TransactionList'
 import { useTransactionDrawer } from './TransactionDrawer'
@@ -28,7 +29,9 @@ export default function TransactionsPage() {
 
   const period = customRange ? range : monthRange(month)
   const filters: TxFilters = { ...f, text, ...period }
-  const activeCount = Object.entries(f).filter(([, v]) => v).length + (customRange ? 1 : 0)
+  // Filtros del panel (sin contar el texto de búsqueda, que está a la vista).
+  const panelCount = Object.entries(f).filter(([k, v]) => k !== 'text' && v).length + (customRange ? 1 : 0)
+  const anyFilter = panelCount > 0 || !!f.text
 
   const q = useQuery(
     () => listTransactions(filters, limit),
@@ -44,20 +47,36 @@ export default function TransactionsPage() {
   const total = q.data?.total ?? 0
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Movimientos</h1>
-        <Button variant="secondary" aria-expanded={showFilters} aria-controls="filtros"
-          onClick={() => setShowFilters((v) => !v)}>
-          ⚲ Filtros{activeCount > 0 && ` (${activeCount})`}
-        </Button>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Movimientos"
+        subtitle={<span aria-live="polite">{customRange ? `${range.from} a ${range.to}` : monthLabel(month)} · {total} movimiento{total === 1 ? '' : 's'}</span>}
+        action={
+          <Button variant="secondary" icon={SlidersHorizontal} aria-expanded={showFilters} aria-controls="filtros"
+            onClick={() => setShowFilters((v) => !v)}>
+            Filtros{panelCount > 0 && ` · ${panelCount}`}
+          </Button>
+        }
+      />
+
+      {/* Búsqueda con ícono, al estilo de iOS */}
+      <div className="relative">
+        <label htmlFor="buscar" className="sr-only">Buscar en notas</label>
+        <Search size={18} strokeWidth={2} aria-hidden className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted" />
+        <input id="buscar" type="search" placeholder="Buscar en notas" value={f.text} onChange={(e) => set('text', e.target.value)}
+          className="min-h-11 w-full rounded-sm border border-line bg-surface pr-10 pl-10 text-base text-ink shadow-[var(--shadow-card)]
+            placeholder:text-muted/70 transition-[border-color,box-shadow] duration-200 focus:border-ink focus:outline-none focus:ring-4 focus:ring-ink/10
+            [&::-webkit-search-cancel-button]:hidden" />
+        {f.text && (
+          <button type="button" onClick={() => set('text', '')} aria-label="Borrar búsqueda"
+            className="pressable animate-fade absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-subtle text-muted hover:text-ink">
+            <X size={14} strokeWidth={2.5} aria-hidden />
+          </button>
+        )}
       </div>
 
-      <Field label="Buscar en notas" type="search" placeholder="Ej: supermercado"
-        value={f.text} onChange={(e) => set('text', e.target.value)} />
-
       {showFilters && (
-        <div id="filtros" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-2">
+        <div id="filtros" className="card animate-enter grid gap-4 p-5 sm:grid-cols-2">
           <Select label="Tipo" value={f.type} onChange={(e) => set('type', e.target.value as TxType | '')}>
             <option value="">Todos</option>
             <option value="expense">Gastos</option>
@@ -83,11 +102,10 @@ export default function TransactionsPage() {
             {(tags.data ?? []).map((t) => <option key={t} value={t}>#{t}</option>)}
           </Select>
 
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" className="size-4" checked={customRange}
-              onChange={(e) => { setCustomRange(e.target.checked); setRange(monthRange(month)); setLimit(PAGE) }} />
-            Usar un rango de fechas en vez del mes seleccionado
-          </label>
+          <div className="sm:col-span-2">
+            <Checkbox label="Usar un rango de fechas en vez del mes seleccionado" checked={customRange}
+              onChange={(v) => { setCustomRange(v); setRange(monthRange(month)); setLimit(PAGE) }} />
+          </div>
           {customRange && (
             <>
               <Field label="Desde" type="date" value={range.from} max={range.to}
@@ -96,38 +114,34 @@ export default function TransactionsPage() {
                 onChange={(e) => e.target.value && setRange((r) => ({ ...r, to: e.target.value }))} />
             </>
           )}
-          {activeCount > 0 && <Button variant="secondary" className="sm:col-span-2" onClick={clear}>Limpiar filtros</Button>}
+          {anyFilter && <Button variant="ghost" icon={X} className="sm:col-span-2" onClick={clear}>Limpiar filtros</Button>}
         </div>
       )}
-
-      <p className="text-sm text-slate-600 dark:text-slate-300" aria-live="polite">
-        {customRange ? `${range.from} a ${range.to}` : monthLabel(month)} · {total} movimiento{total === 1 ? '' : 's'}
-      </p>
 
       {q.error && <Alert>{q.error}</Alert>}
 
       {q.loading && !q.data ? (
-        <Spinner label="Cargando movimientos…" />
+        <Loading label="Cargando movimientos…" rows={5} />
       ) : rows.length === 0 ? (
-        activeCount > 0 || f.text ? (
-          <EmptyState icon="🔍" title="Sin resultados" action={<Button variant="secondary" onClick={clear}>Limpiar filtros</Button>}>
+        anyFilter ? (
+          <EmptyState icon={SearchX} title="Sin resultados" action={<Button variant="secondary" icon={X} onClick={clear}>Limpiar filtros</Button>}>
             No hay movimientos que coincidan con estos filtros.
           </EmptyState>
         ) : (
-          <EmptyState icon="📋" title={`Sin movimientos en ${monthLabel(month)}`}
-            action={<Button onClick={() => openNew()}>+ Nueva transacción</Button>}>
+          <EmptyState icon={ListOrdered} title={`Sin movimientos en ${monthLabel(month)}`}
+            action={<Button icon={Plus} onClick={() => openNew()}>Nueva transacción</Button>}>
             Registra tus gastos, ingresos y transferencias entre cuentas. Toma menos de 10 segundos.
           </EmptyState>
         )
       ) : (
-        <>
+        <div className={`flex flex-col gap-5 transition-opacity duration-200 ${q.loading ? 'opacity-60' : ''}`}>
           <TransactionList rows={rows} onSelect={openEdit} />
           {rows.length < total && (
             <Button variant="secondary" loading={q.loading} onClick={() => setLimit((l) => l + PAGE)}>
               Cargar más ({total - rows.length} restantes)
             </Button>
           )}
-        </>
+        </div>
       )}
     </div>
   )

@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
           <Field label="Correo" type="email" autoComplete="email" inputMode="email" required
             value={email} onChange={(e) => setEmail(e.target.value)} />
           <Turnstile ref={captchaRef} onToken={setCaptcha} />
-          <Button type="submit" loading={busy} disabled={!email || (captchaEnabled && !captcha)}>
+          <Button type="submit" size="lg" loading={busy} disabled={!email || (captchaEnabled && !captcha)}>
             Enviar enlace
           </Button>
         </form>

@@ -1,11 +1,14 @@
 import { useState } from 'react'
+import { ChevronDown, Plus, Wallet } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { formatCLP } from '@/lib/format'
 import { ACCOUNT_TYPES } from '@/lib/icons'
 import { cardStatus, loanStatus } from '@/lib/debt'
+import { useAnimatedNumber } from '@/lib/motion'
+import { ACCOUNT_ICONS, IconTile } from '@/components/icons'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/Modal'
-import { Alert, Button, EmptyState, Spinner } from '@/components/ui'
+import { Alert, Button, EmptyState, Loading, PageHeader } from '@/components/ui'
 import type { AccountWithBalance } from '@/types'
 import { AccountForm } from './AccountForm'
 
@@ -17,43 +20,47 @@ export default function AccountsPage() {
   const active = accounts.filter((a) => !a.archived)
   const archived = accounts.filter((a) => a.archived)
   const total = active.reduce((s, a) => s + a.balance, 0)
+  const shownTotal = useAnimatedNumber(total)
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Cuentas</h1>
-        {active.length > 0 && <Button onClick={() => setEditing('new')}>+ Nueva cuenta</Button>}
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader title="Cuentas"
+        action={active.length > 0 && <Button icon={Plus} onClick={() => setEditing('new')}>Nueva cuenta</Button>} />
 
       {error && <Alert>{error}</Alert>}
       {loading ? (
-        <Spinner label="Cargando cuentas…" />
+        <Loading label="Cargando cuentas…" />
       ) : active.length === 0 && archived.length === 0 ? (
-        <EmptyState icon="🏦" title="Crea tu primera cuenta"
-          action={<Button onClick={() => setEditing('new')}>+ Nueva cuenta</Button>}>
+        <EmptyState icon={Wallet} title="Crea tu primera cuenta"
+          action={<Button icon={Plus} onClick={() => setEditing('new')}>Nueva cuenta</Button>}>
           Agrega donde tienes tu dinero: efectivo, cuenta bancaria, ahorro o tarjeta de crédito,
           con su saldo actual. Después podrás registrar movimientos en ellas.
         </EmptyState>
       ) : (
         <>
-          <div className="rounded-2xl bg-teal-700 p-5 text-white dark:bg-teal-800">
-            <p className="text-sm opacity-90">Saldo total</p>
-            <p className="text-3xl font-bold">{formatCLP(total)}</p>
-            <p className="mt-1 text-xs opacity-80">Lo que tienes menos tus deudas (tarjetas y préstamos restan).</p>
+          {/* Panel carbón: el único bloque oscuro, para jerarquía clara. */}
+          <div className="animate-enter rounded-lg bg-accent p-6 text-on-accent shadow-[var(--shadow-float)] md:p-8">
+            <p className="text-xs font-medium tracking-[0.08em] uppercase opacity-75">Saldo total</p>
+            <p className="figure-hero mt-2 text-[2.25rem] leading-none md:text-[3rem]">
+              <span className="sr-only">{formatCLP(total)}</span><span aria-hidden>{formatCLP(shownTotal)}</span>
+            </p>
+            <p className="mt-3 text-sm opacity-75">Lo que tienes menos tus deudas (tarjetas y préstamos restan).</p>
           </div>
 
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="stagger grid gap-3 sm:grid-cols-2">
             {active.map((a) => <AccountCard key={a.id} account={a} onClick={() => setEditing(a)} />)}
           </ul>
 
           {archived.length > 0 && (
             <section>
-              <button className="text-sm font-medium text-slate-600 underline dark:text-slate-300"
+              <button className="pressable inline-flex items-center gap-1.5 text-sm font-medium text-soft hover:text-ink"
                 aria-expanded={showArchived} onClick={() => setShowArchived((v) => !v)}>
                 {showArchived ? 'Ocultar' : 'Ver'} cuentas archivadas ({archived.length})
+                <ChevronDown size={16} strokeWidth={2} aria-hidden
+                  className={`transition-transform duration-300 ease-soft ${showArchived ? 'rotate-180' : ''}`} />
               </button>
               {showArchived && (
-                <ul className="mt-3 grid gap-3 opacity-75 sm:grid-cols-2">
+                <ul className="stagger mt-3 grid gap-3 opacity-75 sm:grid-cols-2">
                   {archived.map((a) => <AccountCard key={a.id} account={a} onClick={() => setEditing(a)} />)}
                 </ul>
               )}
@@ -75,33 +82,31 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
   const isCard = a.type === 'credit_card'
   const { debt, available, usedPct } = cardStatus(a)
   const loan = a.type === 'loan' ? loanStatus(a) : null
+  const amountCls = 'figure-hero text-[1.375rem] leading-tight'
 
   return (
     <li>
       <button onClick={onClick}
-        className="flex w-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800">
+        className="card flex h-full w-full flex-col gap-3 p-4 text-left transition-[border-color,transform] duration-200 hover:border-line-strong/40 active:scale-[0.99] md:p-5">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-full text-lg" style={{ backgroundColor: `${a.color}22` }} aria-hidden>
-            {t.icon}
-          </span>
+          <IconTile icon={ACCOUNT_ICONS[a.type]} color={a.color} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{a.name}{a.archived && ' (archivada)'}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t.label}</p>
+            <p className="text-[0.8125rem] text-muted">{t.label}</p>
           </div>
-          <span className="size-3 rounded-full" style={{ backgroundColor: a.color }} aria-hidden />
         </div>
 
         {isCard ? (
           <>
-            <p className="tabular-nums">
-              <span className="text-sm text-slate-500 dark:text-slate-400">Deuda </span>
-              <span className="text-xl font-bold">{formatCLP(debt)}</span>
-            </p>
+            <div>
+              <p className="label-caps">Deuda</p>
+              <p className={amountCls}>{formatCLP(debt)}</p>
+            </div>
             {usedPct != null && (
               <ProgressBar pct={usedPct} label={`Cupo utilizado: ${usedPct}%`}
-                barClass={usedPct >= 80 ? 'bg-amber-500' : 'bg-teal-600'} />
+                barClass={usedPct >= 80 ? 'bg-warn-bar' : 'bg-ink'} />
             )}
-            <p className="text-xs text-slate-600 dark:text-slate-300">
+            <p className="text-xs text-muted">
               {available != null && <>Disponible {formatCLP(available)} de {formatCLP(a.credit_limit!)} · </>}
               {a.closing_day && <>Cierra el {a.closing_day} · </>}
               {a.payment_day && <>Paga el {a.payment_day}</>}
@@ -109,27 +114,28 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
           </>
         ) : loan ? (
           <>
-            <p className="tabular-nums">
-              <span className="text-sm text-slate-500 dark:text-slate-400">Debes </span>
-              <span className="text-xl font-bold">{formatCLP(loan.debt)}</span>
-            </p>
-            {loan.pct != null && <ProgressBar pct={loan.pct} label={`Pagado: ${loan.pct}%`} />}
-            <p className="text-xs text-slate-600 dark:text-slate-300">
+            <div>
+              <p className="label-caps">Debes</p>
+              <p className={amountCls}>{formatCLP(loan.debt)}</p>
+            </div>
+            {loan.pct != null && <ProgressBar pct={loan.pct} label={`Pagado: ${loan.pct}%`} barClass="bg-pos-bar" />}
+            <p className="text-xs text-muted">
               {a.counterparty && <>{a.counterparty} · </>}
               {loan.pct != null && <>{loan.pct}% pagado · </>}
               {a.payment_day && <>Paga el {a.payment_day}</>}
             </p>
           </>
         ) : a.type === 'receivable' ? (
-          <p className="tabular-nums">
-            <span className="text-sm text-slate-500 dark:text-slate-400">Te deben </span>
-            <span className="text-xl font-bold">{formatCLP(Math.max(0, a.balance))}</span>
-            {a.counterparty && <span className="block text-xs text-slate-600 dark:text-slate-300">{a.counterparty}</span>}
-          </p>
+          <div>
+            <p className="label-caps">Te deben</p>
+            <p className={amountCls}>{formatCLP(Math.max(0, a.balance))}</p>
+            {a.counterparty && <p className="mt-1 text-xs text-muted">{a.counterparty}</p>}
+          </div>
         ) : (
-          <p className={`text-xl font-bold tabular-nums ${a.balance < 0 ? 'text-red-700 dark:text-red-400' : ''}`}>
-            {formatCLP(a.balance)}
-          </p>
+          <div>
+            <p className="label-caps">Saldo</p>
+            <p className={`${amountCls} ${a.balance < 0 ? 'text-neg' : ''}`}>{formatCLP(a.balance)}</p>
+          </div>
         )}
       </button>
     </li>

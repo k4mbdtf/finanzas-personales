@@ -15,6 +15,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | 4 | Dashboard y gráficos | ✅ |
 | 5 | PWA, exportación, despliegue y keep-alive | ✅ |
 | Etapa 2 | Deudas y cuotas, metas, recurrentes, importar cartolas, patrimonio | ✅ |
+| Diseño | Estilo suizo minimalista: beige y carbón, íconos Lucide, animaciones suaves | ✅ |
 
 **Inicio rápido:** [1. Supabase](#1-crear-el-proyecto-en-supabase) → [2. Auth](#2-configurar-auth) →
 [3. Captcha](#3-activar-el-captcha-cloudflare-turnstile) → [4. Local](#4-ejecutar-en-local) →
@@ -45,15 +46,15 @@ scripts/
 src/
   types.ts               Tipos de las tablas (actualizar si cambia el SQL)
   lib/                   supabase (cliente), format (CLP), dates (meses), errors,
-                         events (recarga automática), icons (emoji de categorías),
-                         theme (claro/oscuro), pwa (service worker, instalar), chartTheme,
+                         events (recarga automática), icons (nombres de íconos y colores),
+                         theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
                          csv (cartolas), recurring (fechas), debt, goals  (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
                          budgets, dashboard, export, goals, recurring, installments, imports, netWorth)
   context/               RefData (cuentas y categorías globales), Month (mes seleccionado)
   auth/AuthProvider.tsx  Sesión global + detección de recuperación de contraseña
-  components/            UI base, Modal (<dialog>), Feedback (confirmar/toast),
+  components/            UI base, icons.tsx (íconos Lucide), Modal (<dialog>), Feedback (confirmar/toast),
                          AmountInput, MonthSelector, AppShell (sidebar + barra inferior)
   features/accounts/     Página de cuentas y formulario
   features/transactions/ Drawer de registro rápido, listado, filtros
@@ -147,7 +148,7 @@ ya tiene movimientos (lo valida la BD). Eliminar una categoría deja sus movimie
 archivarla la oculta de los formularios y conserva el historial.
 
 **Presupuestos** (`/#/presupuestos`): monto mensual por categoría de gasto. Barra de progreso
-verde-azulada, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del límite",
+verde, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del límite",
 "Excedido por $X") para no depender del color. Resumen del total y botón para copiar los
 presupuestos del mes anterior. Las transferencias no cuentan como gasto.
 
@@ -182,6 +183,26 @@ Los colores de ingresos/gastos (`src/lib/chartTheme.ts`) se validaron para contr
 oscuro. Verde/rojo queda en el límite de distinción para daltonismo, por eso nunca se usan solos:
 leyenda, orden fijo, separación entre barras, tooltip y vista de tabla. Los totales los calcula la
 base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no cuentan.
+
+## Diseño
+
+Estilo suizo minimalista con detalles inspirados en Apple. Todo vive en `src/index.css`
+(variables CSS + `@theme` de Tailwind), así que cambiar un color es cambiar una línea.
+
+- **Colores:** fondo beige `#F5F1E8` con tarjetas blancas; tinta y botón principal carbón `#1C1C1C`
+  (nunca negro puro). En oscuro el fondo es `#111111` y el botón principal se invierte a beige.
+  Verde = ingreso, rojo = gasto, ámbar = cerca del límite. Todo texto cumple contraste **AAA (7:1)**
+  sobre fondo, tarjeta y gris claro, y el color nunca va solo (siempre hay texto o ícono).
+- **Tipografía:** la fuente del sistema en Apple (SF Pro) e Inter en el resto
+  (`@fontsource-variable/inter`, incluida en el build, sin pedir nada a Google).
+- **Íconos:** [Lucide](https://lucide.dev) (`lucide-react`), sin emojis. La BD guarda el nombre del
+  ícono de cada categoría (`home`, `food`…) y `src/components/icons.tsx` lo traduce a un componente.
+- **Formas:** radios chicos (2–8 px), bordes finos y sombras muy suaves.
+- **Animaciones** (`src/lib/motion.ts` y keyframes en `index.css`): solo `transform` y `opacity`,
+  200–700 ms con curvas suaves. Hojas que suben desde abajo en el celular, entrada escalonada de las
+  listas, cifras que cuentan hasta su valor, barras que se llenan, selector segmentado que se desliza
+  y esqueletos en vez de spinners. Con **"Reducir movimiento"** activado en el sistema, todo aparece
+  sin animación (también los gráficos).
 
 ## Seguridad
 

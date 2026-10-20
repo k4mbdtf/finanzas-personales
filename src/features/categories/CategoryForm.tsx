@@ -1,12 +1,14 @@
 // Crear / editar una categoría (nombre, tipo, ícono, color, archivar).
 import { useState, type FormEvent } from 'react'
+import { Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { createCategory, deleteCategory, updateCategory } from '@/data/categories'
 import { AppError } from '@/lib/errors'
-import { COLORS, iconFor } from '@/lib/icons'
+import { COLORS } from '@/lib/icons'
+import { CategoryIcon } from '@/components/icons'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { ColorPicker, IconPicker } from '@/components/Pickers'
-import { Alert, Button, Field, Segmented } from '@/components/ui'
+import { Alert, Button, Checkbox, Field, Segmented } from '@/components/ui'
 import type { Category, CategoryKind } from '@/types'
 
 export function CategoryForm({
@@ -79,10 +81,8 @@ export function CategoryForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {error && <Alert>{error}</Alert>}
 
-      <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-900" aria-hidden>
-        <span className="grid size-12 place-items-center rounded-full text-2xl" style={{ backgroundColor: `${color}33` }}>
-          {iconFor(icon)}
-        </span>
+      <div className="flex items-center gap-3 rounded-sm bg-subtle p-3" aria-hidden>
+        <CategoryIcon name={icon} color={color} size="lg" />
         <span className="font-semibold">{name.trim() || 'Vista previa'}</span>
       </div>
 
@@ -90,7 +90,7 @@ export function CategoryForm({
         placeholder="Ej: Café, Gimnasio" value={name} onChange={(e) => setName(e.target.value)} />
 
       {category ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        <p className="text-sm text-soft">
           Tipo: <strong>{category.kind === 'expense' ? 'Gasto' : 'Ingreso'}</strong> (no se puede cambiar después de crearla).
         </p>
       ) : (
@@ -102,14 +102,11 @@ export function CategoryForm({
       <ColorPicker value={color} onChange={setColor} />
 
       {category && (
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input type="checkbox" className="size-4" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-          Archivar (no aparece al registrar movimientos; conserva el historial)
-        </label>
+        <Checkbox label="Archivar (no aparece al registrar movimientos; conserva el historial)" checked={archived} onChange={setArchived} />
       )}
 
-      <Button type="submit" loading={busy}>{category ? 'Guardar cambios' : 'Crear categoría'}</Button>
-      {category && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar categoría</Button>}
+      <Button type="submit" size="lg" loading={busy}>{category ? 'Guardar cambios' : 'Crear categoría'}</Button>
+      {category && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar categoría</Button>}
     </form>
   )
 }

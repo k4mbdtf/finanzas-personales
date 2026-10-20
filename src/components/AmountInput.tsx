@@ -29,7 +29,7 @@ export function AmountInput({
         const digits = e.target.value.replace(/\D/g, '').slice(0, MAX_DIGITS)
         onChange(parseCLP(digits))
       }}
-      inputClassName={big ? 'min-h-14 text-3xl font-bold tabular-nums' : 'tabular-nums'}
+      inputClassName={big ? 'min-h-16 text-[2rem] font-bold tracking-[-0.03em] tabular-nums' : 'tabular-nums'}
     />
   )
 }

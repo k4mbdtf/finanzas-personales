@@ -48,7 +48,7 @@ export default function LoginPage() {
         <Field label="Contraseña" type="password" autoComplete="current-password" required
           value={password} onChange={(e) => setPassword(e.target.value)} />
         <Turnstile ref={captchaRef} onToken={setCaptcha} />
-        <Button type="submit" loading={busy}
+        <Button type="submit" size="lg" loading={busy}
           disabled={!email || !password || (captchaEnabled && !captcha)}>
           Entrar
         </Button>

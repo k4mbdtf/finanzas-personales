@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
-import { iconFor } from '@/lib/icons'
+import { CategoryIcon } from '@/components/icons'
 import { Modal } from '@/components/Modal'
-import { Alert, Button, Segmented, Spinner } from '@/components/ui'
+import { Alert, Button, Loading, PageHeader, Segmented } from '@/components/ui'
 import type { Category, CategoryKind } from '@/types'
 import { CategoryForm } from './CategoryForm'
 
@@ -16,25 +17,26 @@ export default function CategoriesPage() {
   const archived = list.filter((c) => c.archived)
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Categorías</h1>
-        <Button onClick={() => setEditing('new')}>+ Nueva</Button>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Categorías"
+        action={<Button icon={Plus} onClick={() => setEditing('new')}>Nueva</Button>} />
+
+      <div className="max-w-sm">
+        <Segmented<CategoryKind> label="Tipo de categoría" value={kind} onChange={setKind}
+          options={[{ value: 'expense', label: 'Gastos' }, { value: 'income', label: 'Ingresos' }]} />
       </div>
 
-      <Segmented<CategoryKind> label="Tipo de categoría" value={kind} onChange={setKind}
-        options={[{ value: 'expense', label: '− Gastos' }, { value: 'income', label: '+ Ingresos' }]} />
-
       {error && <Alert>{error}</Alert>}
-      {loading ? <Spinner label="Cargando categorías…" /> : (
+      {loading ? <Loading label="Cargando categorías…" /> : (
         <>
-          <CategoryGrid items={active} onSelect={setEditing} />
+          {/* key: al cambiar de tipo la grilla vuelve a entrar en cascada */}
+          <CategoryGrid key={kind} items={active} onSelect={setEditing} />
           {active.length === 0 && (
-            <p className="text-sm text-slate-600 dark:text-slate-300">No tienes categorías activas de este tipo.</p>
+            <p className="text-sm text-soft">No tienes categorías activas de este tipo.</p>
           )}
           {archived.length > 0 && (
             <section>
-              <h2 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Archivadas</h2>
+              <h2 className="label-caps mb-2 px-1">Archivadas</h2>
               <div className="opacity-70"><CategoryGrid items={archived} onSelect={setEditing} /></div>
             </section>
           )}
@@ -55,15 +57,14 @@ export default function CategoriesPage() {
 
 function CategoryGrid({ items, onSelect }: { items: Category[]; onSelect: (c: Category) => void }) {
   return (
-    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <ul className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((c) => (
         <li key={c.id}>
           <button onClick={() => onSelect(c)}
-            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full text-lg" style={{ backgroundColor: `${c.color}33` }} aria-hidden>
-              {iconFor(c.icon)}
-            </span>
-            <span className="min-w-0 truncate font-medium">{c.name}</span>
+            className="card pressable flex w-full items-center gap-3 p-3 text-left transition-[border-color] duration-200 hover:border-line-strong/40">
+            <CategoryIcon name={c.icon} color={c.color} />
+            <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
+            <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-muted" aria-hidden />
           </button>
         </li>
       ))}

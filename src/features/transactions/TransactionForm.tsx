@@ -5,6 +5,7 @@
 // Nota y etiquetas quedan en "Más detalles".
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronDown, Trash2, Wallet } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { createTransaction, deleteTransaction, parseTags, updateTransaction } from '@/data/transactions'
 import { budgetUsage } from '@/data/budgets'
@@ -14,7 +15,7 @@ import { todayISO } from '@/lib/format'
 import { AmountInput } from '@/components/AmountInput'
 import { CategoryPicker } from '@/components/CategoryPicker'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, EmptyState, Field, Segmented, Select, Spinner } from '@/components/ui'
+import { Alert, Button, EmptyState, Field, Segmented, Select, Loading } from '@/components/ui'
 import type { Transaction, TxInput, TxType } from '@/types'
 
 const LAST_ACCOUNT_KEY = 'finanzas.lastAccount'
@@ -29,11 +30,11 @@ type Props = { tx?: Transaction; preset?: Partial<TxInput>; onDone: () => void }
  *  por defecto dependen de ellas). */
 export function TransactionForm({ tx, preset, onDone }: Props) {
   const { accounts, loading } = useRefData()
-  if (loading) return <Spinner label="Cargando…" />
+  if (loading) return <Loading label="Cargando…" />
   if (!accounts.some((a) => !a.archived) && !tx) {
     return (
-      <EmptyState icon="🏦" title="Primero crea una cuenta"
-        action={<Link to="/cuentas" onClick={onDone} className="font-medium text-teal-700 underline dark:text-teal-400">Ir a Cuentas</Link>}>
+      <EmptyState icon={Wallet} title="Primero crea una cuenta"
+        action={<Link to="/cuentas" onClick={onDone} className="link">Ir a Cuentas</Link>}>
         Los movimientos se registran en una cuenta (efectivo, banco, tarjeta…).
       </EmptyState>
     )
@@ -182,9 +183,9 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
         value={type}
         onChange={changeType}
         options={[
-          { value: 'expense', label: '− Gasto', activeClass: 'bg-red-700 text-white shadow-sm' },
-          { value: 'income', label: '+ Ingreso', activeClass: 'bg-green-700 text-white shadow-sm' },
-          { value: 'transfer', label: '⇄ Transferencia', activeClass: 'bg-slate-700 text-white shadow-sm' },
+          { value: 'expense', label: '− Gasto', tone: 'neg' },
+          { value: 'income', label: '+ Ingreso', tone: 'pos' },
+          { value: 'transfer', label: 'Transferencia', tone: 'accent' },
         ]}
       />
 
@@ -215,17 +216,20 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
           </div>
           {[['Hoy', today], ['Ayer', yesterday]].map(([label, value]) => (
             <button key={label} type="button" aria-pressed={date === value} onClick={() => setDate(value)}
-              className={`min-h-11 rounded-lg border px-3 text-sm font-medium ${
-                date === value ? 'border-teal-600 bg-teal-50 text-teal-900 dark:bg-teal-900/40 dark:text-teal-100' : 'border-slate-300 dark:border-slate-600'}`}>
+              className={`pressable min-h-11 rounded-sm border px-3.5 text-sm font-semibold transition-colors duration-200 ${
+                date === value ? 'border-accent bg-accent text-on-accent' : 'border-line-strong/45 bg-surface text-ink hover:bg-subtle'}`}>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      <details open={!!(tx?.note || tx?.tags.length)} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-        <summary className="cursor-pointer text-sm font-medium">Más detalles (nota, etiquetas)</summary>
-        <div className="mt-3 flex flex-col gap-3">
+      <details open={!!(tx?.note || tx?.tags.length)} className="group rounded-sm border border-line">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          Más detalles (nota, etiquetas)
+          <ChevronDown size={18} strokeWidth={2} className="text-muted transition-transform duration-300 ease-soft group-open:rotate-180" aria-hidden />
+        </summary>
+        <div className="flex flex-col gap-3 px-3.5 pb-3.5">
           <Field label="Nota" maxLength={500} placeholder="Ej: almuerzo con el equipo"
             value={note} onChange={(e) => setNote(e.target.value)} />
           <Field label="Etiquetas" placeholder="Ej: viaje, trabajo" hint="Sepáralas con comas."
@@ -233,10 +237,10 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
         </div>
       </details>
 
-      <Button type="submit" loading={busy} className="min-h-12 text-base">
+      <Button type="submit" size="lg" loading={busy}>
         {tx ? 'Guardar cambios' : 'Guardar'}
       </Button>
-      {tx && <Button type="button" variant="secondary" onClick={onDelete}>Eliminar movimiento</Button>}
+      {tx && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar movimiento</Button>}
     </form>
   )
 }

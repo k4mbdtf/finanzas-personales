@@ -11,9 +11,13 @@ import {
   decodeText, detectDelimiter, guessDateOrder, guessHeaderRow, guessMapping, normalizeForMatch, parseCSV,
   type DateOrder, type Mapping,
 } from '@/lib/csv'
+import {
+  ArrowRight, Check, ChevronLeft, ChevronRight, FileSpreadsheet, FileUp, ListChecks, RefreshCw, TriangleAlert, Undo2, X,
+} from 'lucide-react'
 import { formatCLP, formatDate } from '@/lib/format'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, Card, Select, Spinner } from '@/components/ui'
+import { IconTile } from '@/components/icons'
+import { Alert, Badge, Button, Card, Checkbox, Loading, PageHeader, SectionHeader, Segmented, Select } from '@/components/ui'
 import { buildRows, rowKeys, sha256, type ImportRow } from './rows'
 
 const MAX_ROWS = 5000
@@ -25,11 +29,34 @@ type ReviewRow = ImportRow & {
   hash: string | null; status: Status; include: boolean; type: 'income' | 'expense'; categoryId: string | null
 }
 
-const STATUS_UI: Record<Status, { label: string; cls: string }> = {
-  new: { label: 'Nuevo', cls: 'bg-teal-100 text-teal-900 dark:bg-teal-900/50 dark:text-teal-100' },
-  imported: { label: 'Ya importado', cls: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
-  possible: { label: '⚠️ Posible duplicado', cls: 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100' },
-  error: { label: 'Omitida', cls: 'bg-red-100 text-red-900 dark:bg-red-900/50 dark:text-red-100' },
+const STATUS_UI: Record<Status, { label: string; tone: 'neutral' | 'pos' | 'neg' | 'warn' }> = {
+  new: { label: 'Nuevo', tone: 'pos' },
+  imported: { label: 'Ya importado', tone: 'neutral' },
+  possible: { label: 'Posible duplicado', tone: 'warn' },
+  error: { label: 'Omitida', tone: 'neg' },
+}
+
+/** Indicador de pasos (1 · 2 · 3) con barra que avanza. */
+function Steps({ current, labels }: { current: number; labels: string[] }) {
+  return (
+    <ol className="grid grid-cols-3 gap-2" aria-label="Pasos">
+      {labels.map((l, i) => {
+        const done = i < current
+        const on = i === current
+        return (
+          <li key={l} aria-current={on ? 'step' : undefined} className="flex flex-col gap-2">
+            <span className="relative h-1 overflow-hidden rounded-full bg-subtle">
+              <span className={`absolute inset-0 origin-left rounded-full bg-ink transition-transform duration-500 ease-soft ${done || on ? 'scale-x-100' : 'scale-x-0'}`} />
+            </span>
+            <span className={`flex items-center gap-1 text-xs font-medium ${on ? 'text-ink' : 'text-muted'}`}>
+              {done ? <Check size={13} strokeWidth={2.5} aria-hidden /> : <span className="tabular-nums">{i + 1}.</span>}
+              {l}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
 }
 
 const colLetter = (i: number) => String.fromCharCode(65 + (i % 26)) + (i >= 26 ? String(Math.floor(i / 26)) : '')
@@ -204,34 +231,42 @@ export default function ImportPage() {
 
   if (usable.length === 0) {
     return (
-      <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-bold">Importar cartola</h1>
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Importar cartola" />
         <Alert kind="info">Primero crea la cuenta (banco o tarjeta) a la que corresponde la cartola, en Cuentas.</Alert>
       </div>
     )
   }
 
+  const stepIndex = { file: 0, map: 1, review: 2 }[step]
+
   return (
-    <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-bold">Importar cartola</h1>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Importar cartola" subtitle="Carga los movimientos de tu banco desde un archivo CSV." />
+      <Steps current={stepIndex} labels={['Archivo', 'Columnas', 'Revisión']} />
       {result && <Alert kind="success">{result}</Alert>}
       {error && <Alert>{error}</Alert>}
 
       {step === 'file' && (
-        <Card className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">1. Elige la cuenta y el archivo</h2>
+        <Card className="animate-enter flex flex-col gap-5">
+          <h2 className="text-[1.0625rem] font-semibold tracking-tight">Elige la cuenta y el archivo</h2>
           <Select label="¿De qué cuenta es la cartola?" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {usable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
-          <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center hover:bg-slate-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-600 dark:border-slate-600 dark:hover:bg-slate-800">
-            <span className="text-3xl" aria-hidden>📥</span>
-            <span className="font-medium">Seleccionar archivo CSV</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">Máximo {MAX_ROWS} filas o 5 MB</span>
+          <label className="pressable flex cursor-pointer flex-col items-center gap-3 rounded-lg border-[1.5px] border-dashed border-line-strong/50 bg-subtle/40 p-8 text-center transition-colors duration-200 hover:bg-subtle has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink">
+            <span className="grid size-12 place-items-center rounded-lg bg-surface text-ink shadow-[var(--shadow-card)]" aria-hidden>
+              <FileUp size={22} strokeWidth={1.75} />
+            </span>
+            <span className="font-semibold">Seleccionar archivo CSV</span>
+            <span className="text-xs text-muted">Máximo {MAX_ROWS} filas o 5 MB</span>
             <input type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" onChange={onFile} />
           </label>
-          <details className="text-sm text-slate-600 dark:text-slate-300">
-            <summary className="cursor-pointer font-medium">¿Cómo descargo mi cartola?</summary>
-            <p className="mt-2">
+          <details className="group text-sm text-soft">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-ink [&::-webkit-details-marker]:hidden">
+              <ChevronRight size={16} strokeWidth={2} className="transition-transform duration-300 ease-soft group-open:rotate-90" aria-hidden />
+              ¿Cómo descargo mi cartola?
+            </summary>
+            <p className="mt-2 pl-5 leading-relaxed">
               En la web de tu banco busca <strong>Cartola</strong> o <strong>Movimientos</strong> y descárgala en formato
               CSV. Si solo ofrece Excel, ábrelo y usa <strong>Archivo → Guardar como → CSV</strong>. Puedes subir la
               misma cartola varias veces: los movimientos ya importados no se duplican.
@@ -241,12 +276,12 @@ export default function ImportPage() {
       )}
 
       {step === 'map' && (
-        <Card className="flex flex-col gap-4">
+        <Card className="animate-enter flex flex-col gap-5">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">2. ¿Qué es cada columna?</h2>
-            <Button variant="secondary" className="min-h-9 text-sm" onClick={() => reset()}>Cambiar archivo</Button>
+            <h2 className="text-[1.0625rem] font-semibold tracking-tight">¿Qué es cada columna?</h2>
+            <Button variant="ghost" size="sm" icon={RefreshCw} onClick={() => reset()}>Cambiar archivo</Button>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-sm text-soft">
             <strong>{fileName}</strong> · {table.length - headerRow - 1} filas. Revisamos el archivo y adivinamos las columnas; corrígelas si hace falta.
           </p>
           <Select label="Fila con los títulos de las columnas" value={headerRow} onChange={(e) => changeHeaderRow(Number(e.target.value))}>
@@ -258,17 +293,13 @@ export default function ImportPage() {
             {colSelect('Fecha', mapping.date, (v) => setMapping({ ...mapping, date: v }))}
             {colSelect('Descripción', mapping.description, (v) => setMapping({ ...mapping, description: v }), true)}
           </div>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium">¿Cómo vienen los montos?</legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="amount-mode" checked={!twoCols} onChange={() => setTwoCols(false)} />
-              Una columna (negativo = cargo)
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="amount-mode" checked={twoCols} onChange={() => setTwoCols(true)} />
-              Dos columnas: cargos y abonos
-            </label>
-          </fieldset>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[0.8125rem] font-medium text-soft">¿Cómo vienen los montos?</span>
+            <Segmented<'one' | 'two'> label="¿Cómo vienen los montos?" value={twoCols ? 'two' : 'one'}
+              onChange={(v) => setTwoCols(v === 'two')}
+              options={[{ value: 'one', label: 'Una columna' }, { value: 'two', label: 'Cargos y abonos' }]} />
+            <p className="text-xs text-muted">{twoCols ? 'Los cargos son gastos y los abonos, ingresos.' : 'Los números negativos son cargos (gastos).'}</p>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {twoCols ? (
               <>
@@ -282,46 +313,44 @@ export default function ImportPage() {
               <option value="ymd">Año-Mes-Día (2026-12-31)</option>
             </Select>
           </div>
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4" checked={invert} onChange={(e) => setInvert(e.target.checked)} />
-            <span>Invertir signos <span className="block text-xs text-slate-500 dark:text-slate-400">Actívalo si los gastos aparecen como números positivos (común en cartolas de tarjeta).</span></span>
-          </label>
+          <Checkbox label="Invertir signos" checked={invert} onChange={setInvert}
+            hint="Actívalo si los gastos aparecen como números positivos (común en cartolas de tarjeta)." />
 
           <div>
-            <h3 className="mb-1 text-sm font-semibold">Vista previa</h3>
-            <ul className="rounded-xl border border-slate-200 text-sm dark:border-slate-700">
-              {preview.length === 0 && <li className="p-3 text-slate-500">Sin filas para mostrar.</li>}
+            <h3 className="label-caps mb-2">Vista previa</h3>
+            <ul className="overflow-hidden rounded-sm border border-line text-sm">
+              {preview.length === 0 && <li className="p-3 text-muted">Sin filas para mostrar.</li>}
               {preview.slice(0, 5).map((r) => (
-                <li key={r.line} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-700">
+                <li key={r.line} className="flex items-center gap-2 border-b border-line px-3 py-2.5 last:border-0">
                   <span className="w-24 shrink-0 tabular-nums">{r.date ? formatDate(r.date) : '—'}</span>
                   <span className="min-w-0 flex-1 truncate">{r.description || '—'}</span>
-                  <span className={`shrink-0 tabular-nums ${r.error ? 'text-slate-400' : (r.amount ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                  <span className={`shrink-0 tabular-nums ${r.error ? 'text-muted' : (r.amount ?? 0) < 0 ? 'text-neg' : 'text-pos'}`}>
                     {r.error ?? `${(r.amount ?? 0) < 0 ? '−' : '+'}${formatCLP(Math.abs(r.amount ?? 0))}`}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
-          <Button onClick={prepareReview} loading={busy}>Revisar movimientos</Button>
+          <Button size="lg" onClick={prepareReview} loading={busy}>Revisar movimientos <ArrowRight size={18} strokeWidth={2} aria-hidden /></Button>
         </Card>
       )}
 
       {step === 'review' && (
-        <Card className="flex flex-col gap-4">
+        <Card className="animate-enter flex flex-col gap-5">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">3. Revisa y elige categorías</h2>
-            <Button variant="secondary" className="min-h-9 text-sm" onClick={() => setStep('map')}>← Columnas</Button>
+            <h2 className="text-[1.0625rem] font-semibold tracking-tight">Revisa y elige categorías</h2>
+            <Button variant="ghost" size="sm" icon={ChevronLeft} onClick={() => setStep('map')}>Columnas</Button>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-sm text-soft">
             {counts.new ?? 0} nuevos · {counts.imported ?? 0} ya importados · {counts.possible ?? 0} posibles duplicados
             {counts.error ? ` · ${counts.error} omitidos (sin fecha o monto)` : ''}.
             Los posibles duplicados coinciden en fecha y monto con un movimiento que ingresaste a mano; quedan sin marcar.
           </p>
 
           <div className="flex flex-wrap items-end gap-2">
-            <Button variant="secondary" className="min-h-9 text-sm"
+            <Button variant="secondary" size="sm" icon={ListChecks}
               onClick={() => setReview((rs) => rs.map((r) => ({ ...r, include: r.status === 'new' })))}>Marcar nuevos</Button>
-            <Button variant="secondary" className="min-h-9 text-sm"
+            <Button variant="secondary" size="sm" icon={X}
               onClick={() => setReview((rs) => rs.map((r) => ({ ...r, include: false })))}>Desmarcar todo</Button>
             <div className="flex min-w-60 flex-1 items-end gap-2">
               <div className="flex-1">
@@ -335,24 +364,24 @@ export default function ImportPage() {
             </div>
           </div>
 
-          <ul className="flex flex-col divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
+          <ul className="flex flex-col divide-y divide-line overflow-hidden rounded-sm border border-line">
             {review.slice(0, visible).map((r, i) => {
               const ui = STATUS_UI[r.status]
               const can = selectable(r)
               return (
-                <li key={r.line} className={`flex flex-col gap-2 p-3 ${can ? '' : 'opacity-60'}`}>
+                <li key={r.line} className={`flex flex-col gap-2 p-3 transition-colors duration-200 ${can ? (r.include ? 'bg-surface' : 'bg-subtle/40') : 'opacity-60'}`}>
                   <div className="flex items-start gap-3">
-                    <input type="checkbox" className="mt-1 size-5 shrink-0" checked={r.include && can} disabled={!can}
+                    <input type="checkbox" className="mt-0.5 size-5 shrink-0 cursor-pointer accent-[var(--accent)]" checked={r.include && can} disabled={!can}
                       aria-label={`Importar fila ${r.line}: ${r.description}`} onChange={(e) => update(i, { include: e.target.checked })} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{r.description || '(sin descripción)'}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Fila {r.line} · {r.date ? formatDate(r.date) : 'fecha inválida'}
-                        <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-medium ${ui.cls}`}>{r.error ?? ui.label}</span>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                        <span>Fila {r.line} · {r.date ? formatDate(r.date) : 'fecha inválida'}</span>
+                        <Badge tone={ui.tone}>{r.status === 'possible' && <TriangleAlert size={11} strokeWidth={2.5} aria-hidden />}{r.error ?? ui.label}</Badge>
                       </p>
                     </div>
                     {r.amount != null && r.amount !== 0 && (
-                      <span className={`shrink-0 text-sm font-semibold tabular-nums ${r.type === 'expense' ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                      <span className={`shrink-0 text-sm font-semibold tabular-nums ${r.type === 'expense' ? 'text-neg' : 'text-pos'}`}>
                         <span className="sr-only">{r.type === 'expense' ? 'Gasto' : 'Ingreso'}: </span>
                         {r.type === 'expense' ? '−' : '+'}{formatCLP(Math.abs(r.amount))}
                       </span>
@@ -361,7 +390,7 @@ export default function ImportPage() {
                   {can && (
                     <select aria-label={`Categoría de la fila ${r.line}`} value={r.categoryId ?? ''}
                       onChange={(e) => update(i, { categoryId: e.target.value || null })}
-                      className="ml-8 min-h-10 rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900">
+                      className="ml-8 min-h-10 rounded-sm border border-line-strong/45 bg-surface px-2 text-sm text-ink focus:border-ink focus:outline-none focus:ring-4 focus:ring-ink/10">
                       <option value="">Sin categoría</option>
                       {categories.filter((c) => c.kind === r.type && !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -374,28 +403,29 @@ export default function ImportPage() {
             <Button variant="secondary" onClick={() => setVisible((v) => v + PAGE)}>Mostrar más ({review.length - visible})</Button>
           )}
 
-          <Button onClick={doImport} loading={busy} disabled={selected.length === 0} className="min-h-12 text-base">
+          <Button size="lg" icon={FileUp} onClick={doImport} loading={busy} disabled={selected.length === 0}>
             Importar {selected.length} movimiento{selected.length === 1 ? '' : 's'}
           </Button>
         </Card>
       )}
 
       <section>
-        <h2 className="mb-2 text-lg font-semibold">Importaciones recientes</h2>
-        {batches.loading && !batches.data ? <Spinner /> : !batches.data?.length ? (
-          <p className="text-sm text-slate-600 dark:text-slate-300">Aún no has importado cartolas.</p>
+        <SectionHeader title="Importaciones recientes" />
+        {batches.loading && !batches.data ? <Loading /> : !batches.data?.length ? (
+          <p className="text-sm text-soft">Aún no has importado cartolas.</p>
         ) : (
-          <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+          <ul className="card stagger overflow-hidden">
             {batches.data.map((b) => (
-              <li key={b.id} className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0 dark:border-slate-700">
+              <li key={b.id} className="flex items-center gap-3 border-b border-line px-4 py-3.5 last:border-0">
+                <IconTile icon={FileSpreadsheet} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{b.filename || 'Cartola'}</span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  <span className="block text-xs text-muted">
                     {accountById.get(b.account_id)?.name ?? 'Cuenta'} · {b.row_count} movimientos ·{' '}
                     {new Date(b.created_at).toLocaleString('es-CL', { timeZone: 'America/Santiago', dateStyle: 'medium', timeStyle: 'short' })}
                   </span>
                 </span>
-                <Button variant="secondary" className="min-h-9 text-sm" onClick={() => undo(b.id, b.filename || 'Cartola', b.row_count)}>Deshacer</Button>
+                <Button variant="ghost" size="sm" icon={Undo2} onClick={() => undo(b.id, b.filename || 'Cartola', b.row_count)}>Deshacer</Button>
               </li>
             ))}
           </ul>

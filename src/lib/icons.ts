@@ -1,59 +1,66 @@
-// Íconos de categorías como emoji: cero dependencias y se ven en todo dispositivo.
-// La BD guarda el nombre (p. ej. "utensils"); aquí se traduce al emoji.
-export const CATEGORY_ICONS: Record<string, string> = {
-  utensils: '🍽️',
-  'shopping-cart': '🛒',
-  coffee: '☕',
-  bus: '🚌',
-  car: '🚗',
-  fuel: '⛽',
-  plane: '✈️',
-  home: '🏠',
-  zap: '⚡',
-  wifi: '📶',
-  phone: '📱',
-  'heart-pulse': '🩺',
-  pill: '💊',
-  'gamepad-2': '🎮',
-  film: '🎬',
-  music: '🎵',
-  'graduation-cap': '🎓',
-  book: '📚',
-  repeat: '🔁',
-  shirt: '👕',
-  'paw-print': '🐾',
-  baby: '👶',
-  gift: '🎁',
-  dumbbell: '🏋️',
-  beauty: '💇',
-  tools: '🛠️',
-  tag: '🏷️',
-  briefcase: '💼',
-  receipt: '🧾',
-  'trending-up': '📈',
-  'piggy-bank': '🐷',
-  bank: '🏦',
-}
+// Datos de íconos y colores (sin React). Los componentes están en components/icons.tsx.
+// La BD guarda el NOMBRE del ícono de cada categoría (p. ej. "utensils"), que
+// coincide con el ícono de Lucide que se dibuja.
 
-export function iconFor(name: string | undefined): string {
-  return (name && CATEGORY_ICONS[name]) || '🏷️'
+/** Íconos disponibles para categorías y metas, con su nombre para lectores de pantalla. */
+export const CATEGORY_ICONS: Record<string, string> = {
+  utensils: 'Comida',
+  'shopping-cart': 'Supermercado',
+  coffee: 'Café',
+  bus: 'Bus',
+  car: 'Auto',
+  fuel: 'Combustible',
+  plane: 'Viaje',
+  home: 'Casa',
+  zap: 'Electricidad',
+  wifi: 'Internet',
+  phone: 'Teléfono',
+  'heart-pulse': 'Salud',
+  pill: 'Remedios',
+  'gamepad-2': 'Juegos',
+  film: 'Cine',
+  music: 'Música',
+  'graduation-cap': 'Educación',
+  book: 'Libros',
+  repeat: 'Suscripción',
+  shirt: 'Ropa',
+  'paw-print': 'Mascotas',
+  baby: 'Bebé',
+  gift: 'Regalos',
+  dumbbell: 'Deporte',
+  beauty: 'Belleza',
+  tools: 'Reparaciones',
+  tag: 'Otros',
+  briefcase: 'Trabajo',
+  receipt: 'Boletas',
+  'trending-up': 'Inversiones',
+  'piggy-bank': 'Ahorro',
+  bank: 'Banco',
 }
 
 export const ACCOUNT_TYPES = {
-  cash: { label: 'Efectivo', icon: '💵' },
-  bank: { label: 'Cuenta bancaria', icon: '🏦' },
-  savings: { label: 'Ahorro', icon: '🐷' },
-  credit_card: { label: 'Tarjeta de crédito', icon: '💳' },
-  loan: { label: 'Préstamo / deuda', icon: '🧾' },
-  receivable: { label: 'Me deben', icon: '🤝' },
+  cash: { label: 'Efectivo' },
+  bank: { label: 'Cuenta bancaria' },
+  savings: { label: 'Ahorro' },
+  credit_card: { label: 'Tarjeta de crédito' },
+  loan: { label: 'Préstamo / deuda' },
+  receivable: { label: 'Me deben' },
 } as const
 
 /** Cuentas cuyo saldo negativo es una deuda (se muestran como "Debes $X"). */
 export const LIABILITY_TYPES = ['credit_card', 'loan'] as const
 export const isLiability = (type: string) => (LIABILITY_TYPES as readonly string[]).includes(type)
 
-/** Paleta para cuentas y categorías (contraste aceptable en claro y oscuro). */
+/** Paleta sobria para cuentas, categorías y metas (saturación ≤ 80%). */
 export const COLORS = [
-  '#0f766e', '#2563eb', '#7c3aed', '#db2777', '#dc2626',
-  '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#64748b',
+  '#3d5a80', // azul acero
+  '#2f6f5e', // verde petróleo
+  '#5b4b8a', // violeta
+  '#9b4a5e', // vino
+  '#b5532f', // óxido
+  '#b38b6d', // taupe
+  '#8a7a3d', // oliva
+  '#4f7a3a', // musgo
+  '#4a7d8c', // azul gris
+  '#6b6b6b', // grafito
 ]

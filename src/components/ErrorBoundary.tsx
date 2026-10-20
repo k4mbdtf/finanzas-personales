@@ -1,5 +1,6 @@
 // Evita la pantalla en blanco ante un error inesperado de la interfaz.
 import { Component, type ReactNode } from 'react'
+import { RotateCw, TriangleAlert } from 'lucide-react'
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
@@ -16,12 +17,14 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
     if (!this.state.failed) return this.props.children
     return (
       <div role="alert" className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-4xl" aria-hidden>😵</p>
-        <h1 className="text-xl font-bold">Algo salió mal</h1>
-        <p className="text-slate-600 dark:text-slate-300">Ocurrió un error inesperado. Tus datos están a salvo.</p>
+        <span className="grid size-14 place-items-center rounded-lg bg-subtle text-ink" aria-hidden>
+          <TriangleAlert size={26} strokeWidth={1.5} />
+        </span>
+        <h1 className="text-xl font-bold tracking-tight">Algo salió mal</h1>
+        <p className="text-soft">Ocurrió un error inesperado. Tus datos están a salvo.</p>
         <button onClick={() => window.location.reload()}
-          className="min-h-11 rounded-lg bg-teal-700 px-4 font-medium text-white hover:bg-teal-800">
-          Recargar la aplicación
+          className="pressable inline-flex min-h-11 items-center gap-2 rounded-sm bg-accent px-4 font-semibold text-on-accent hover:bg-accent-hover">
+          <RotateCw size={18} strokeWidth={2} aria-hidden /> Recargar la aplicación
         </button>
       </div>
     )
