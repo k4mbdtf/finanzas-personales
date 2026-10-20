@@ -37,7 +37,7 @@ supabase/migrations/
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 supabase/email-templates/ Correos de confirmación y recuperación en español
 .github/workflows/
-  ci.yml                 Tipos + pruebas unitarias + build + pruebas SQL en cada push a otra rama
+  ci.yml                 Lint + tipos + pruebas unitarias + build + pruebas SQL en cada push a otra rama
   deploy.yml             Pruebas + build + publicación en GitHub Pages en cada push a main
   keepalive.yml          Ping a Supabase cada 3 días
 public/                  manifest.webmanifest, sw.js (service worker), íconos
@@ -400,5 +400,8 @@ correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commi
   (no `createClient()`, que trae realtime, storage y functions: ~28 kB gzip más). Si algún día se
   necesita Realtime o Storage, vuelve a `createClient()` de `@supabase/supabase-js` (hoy solo en
   `devDependencies`, para los scripts). Los gráficos del inicio se cargan en diferido.
-- **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run preview` ·
+- **Lint:** `npm run lint` (ESLint, `eslint.config.js`): reglas recomendadas de JS y TypeScript y
+  las de hooks de React. `exhaustive-deps` también revisa las dependencias de cada `useQuery`. Cualquier
+  aviso hace fallar el CI (`--max-warnings 0`).
+- **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run lint` · `npm run preview` ·
   `npm run test:unit` · `npm run test:sql` · `npm run seed` · `npm run test:isolation`.

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ListOrdered, Plus, Search, SearchX, SlidersHorizontal, X } from 'lucide-react'
 import { useMonth } from '@/context/Month'
 import { useRefData } from '@/context/RefData'
-import { listTags, listTransactions, type TxFilters } from '@/data/transactions'
+import { listTags, listTransactions } from '@/data/transactions'
 import { useDebounced, useQuery } from '@/hooks/useQuery'
 import { monthLabel, monthRange } from '@/lib/dates'
 import { Alert, Button, Checkbox, EmptyState, Field, Loading, PageHeader, Select } from '@/components/ui'
@@ -27,15 +27,16 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const text = useDebounced(f.text)
 
-  const period = customRange ? range : monthRange(month)
-  const filters: TxFilters = { ...f, text, ...period }
+  const { from, to } = customRange ? range : monthRange(month)
+  const { type, accountId, categoryId, tag } = f
   // Filtros del panel (sin contar el texto de búsqueda, que está a la vista).
   const panelCount = Object.entries(f).filter(([k, v]) => k !== 'text' && v).length + (customRange ? 1 : 0)
   const anyFilter = panelCount > 0 || !!f.text
 
   const q = useQuery(
-    () => listTransactions(filters, limit),
-    [JSON.stringify(filters), limit],
+    // Se usa el texto con debounce (f.text cambia en cada tecla): recarga solo al dejar de escribir.
+    () => listTransactions({ type, accountId, categoryId, tag, text, from, to }, limit),
+    [type, accountId, categoryId, tag, text, from, to, limit],
     ['transactions'],
   )
   const tags = useQuery(listTags, [], ['transactions'])

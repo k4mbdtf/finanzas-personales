@@ -8,7 +8,7 @@ const ok = (name) => console.log(`  ✔ ${name}`)
 const bad = (name, detail = '') => { failed++; console.log(`  ✘ ${name} ${detail}`) }
 const check = (cond, name, detail) => (cond ? ok(name) : bad(name, detail))
 
-const [ana, bruno, carla] = await Promise.all(TEST_USERS.map((u) => clientFor(u.email)))
+const [ana, bruno] = await Promise.all(TEST_USERS.map((u) => clientFor(u.email)))
 const A = ana.client, B = bruno.client
 
 // IDs reales de Bruno (obtenidos con SU sesión) que Ana intentará usar.

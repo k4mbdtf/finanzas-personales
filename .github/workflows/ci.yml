@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   check:
-    name: Tipos, pruebas unitarias y build
+    name: Lint, tipos, pruebas unitarias y build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,6 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Lint (ESLint)
+        run: npm run lint
       - name: Chequeo de tipos
         run: npm run typecheck
       - name: Pruebas unitarias
