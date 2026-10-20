@@ -21,17 +21,24 @@ import { TransactionDrawerProvider, useTransactionDrawer } from '@/features/tran
 const MOBILE_NAV: NavItem[] = [...MAIN_NAV, { to: '/mas', label: 'Más', icon: Ellipsis }]
 const MORE_PATHS = ['/mas', ...MORE_NAV.map((n) => n.to)]
 
-/** Genera una vez por carga de la app los movimientos recurrentes pendientes. */
-let recurringChecked = false
+/**
+ * Genera una vez por carga de la app y por usuario los movimientos recurrentes
+ * pendientes (si otra persona inicia sesión en la misma pestaña, se generan los suyos).
+ */
+let recurringCheckedFor: string | null = null
 function useMaterializeRecurring() {
   const toast = useToast()
+  const userId = useAuth().session?.user.id
   useEffect(() => {
-    if (recurringChecked) return
-    recurringChecked = true
+    if (!userId || recurringCheckedFor === userId) return
+    recurringCheckedFor = userId
     materializeRecurring()
       .then((n) => { if (n > 0) toast(`Se registraron ${n} movimiento${n === 1 ? '' : 's'} recurrente${n === 1 ? '' : 's'}`) })
-      .catch(() => { recurringChecked = false /* se reintenta en la próxima carga */ })
-  }, [toast])
+      .catch(() => {
+        // Se reintenta en la próxima carga (si no cambió el usuario entretanto).
+        if (recurringCheckedFor === userId) recurringCheckedFor = null
+      })
+  }, [toast, userId])
 }
 
 /** Rutas sin botón flotante (no son de registro: evita tapar contenido). */
