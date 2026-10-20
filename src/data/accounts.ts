@@ -9,21 +9,17 @@ type BalanceRow = { account_id: string; balance: number; inflow: number; outflow
 
 /** Todas las cuentas (incluidas archivadas) con su saldo y lo que entró y salió. */
 export async function listAccounts(): Promise<AccountWithBalance[]> {
-  const [accs, first] = await Promise.all([
+  const [accs, bals] = await Promise.all([
     supabase.from('accounts').select('*').order('created_at'),
     supabase.from('account_balances').select('account_id, balance, inflow, outflow'),
   ])
-  // Si la migración 0006 aún no se aplicó (sin inflow/outflow), la app sigue funcionando.
-  const bals = first.error
-    ? await supabase.from('account_balances').select('account_id, balance')
-    : first
   const accounts = unwrap<Account[]>(accs)
-  const balances = new Map(unwrap<Partial<BalanceRow>[]>(bals).map((b) => [b.account_id, b]))
+  const balances = new Map(unwrap<BalanceRow[]>(bals).map((b) => [b.account_id, b]))
   return accounts.map((a) => {
     const b = balances.get(a.id)
     return {
       ...a,
-      balance: b?.balance != null ? Number(b.balance) : a.initial_balance,
+      balance: b ? Number(b.balance) : a.initial_balance,
       inflow: Number(b?.inflow ?? 0),
       outflow: Number(b?.outflow ?? 0),
     }
