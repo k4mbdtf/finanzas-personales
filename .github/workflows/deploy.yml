@@ -36,6 +36,10 @@ jobs:
         run: npm run test:unit
       - name: Pruebas SQL (migraciones en PostgreSQL desechable)
         run: npm run test:sql
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas de punta a punta (Playwright)
+        run: npm run test:e2e
 
   build:
     needs: test
