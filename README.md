@@ -53,7 +53,8 @@ src/
                          events (recarga automática), icons (nombres de íconos y colores),
                          theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
                          csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
-                         cuenta), institutions (bancos), investments  (+ *.test.ts)
+                         cuenta), institutions (bancos), investments, upcoming (próximos pagos)
+                         (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
                          budgets, dashboard, export, goals, recurring, installments, imports, netWorth,
@@ -180,6 +181,10 @@ presupuestos del mes anterior. Las transferencias no cuentan como gasto.
 - KPIs: saldo en cuentas, ingresos, gastos y ahorro (con % de ahorro sobre ingresos), con variación
   vs el mes anterior (▲/▼ + texto; en gastos subir es malo).
 - Presupuestos en alerta (≥ 80%).
+- **Próximos pagos** (30 días): pago de tarjetas y cuotas de préstamos según su día de pago (con la
+  deuda actual o el valor de la cuota), movimientos recurrentes de gasto o transferencia y la próxima
+  cuota de cada compra en cuotas (esta no suma al total: ya va dentro del pago de la tarjeta). Tocar
+  una tarjeta o un préstamo abre el pago ya completado. Lógica en `src/lib/upcoming.ts` (+ pruebas).
 - Dona de gastos por categoría: top 5 + "Otros", con el color de cada categoría y una leyenda-tabla
   con monto y %.
 - Barras de ingresos vs gastos de los 12 meses que terminan en el mes seleccionado, con botón

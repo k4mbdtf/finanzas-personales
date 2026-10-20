@@ -234,12 +234,14 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 }
 
 /** Título de sección con acción opcional (p. ej. "Ver todos"). */
-export function SectionHeader({ title, action, icon: Icon, iconClass = '' }: {
+export function SectionHeader({ title, action, icon: Icon, iconClass = '', id }: {
   title: string; action?: ReactNode; icon?: LucideIcon; iconClass?: string
+  /** Para nombrar la sección (aria-labelledby). */
+  id?: string
 }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-tight">
+      <h2 id={id} className="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-tight">
         {Icon && <Icon size={18} strokeWidth={2} className={iconClass} aria-hidden />}
         {title}
       </h2>

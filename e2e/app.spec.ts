@@ -108,3 +108,39 @@ test.describe('con una cuenta y la sesión guardada', () => {
     await expect(page.getByLabel('Correo')).toBeVisible()
   })
 })
+
+test('próximos pagos: muestra lo que vence y pagar la tarjeta la saca de la lista', async ({ page }) => {
+  const hoy = today()
+  const en5dias = new Date(Date.parse(`${hoy}T12:00:00Z`) + 5 * 86_400_000).toISOString().slice(0, 10)
+  const db = new FakeSupabase({
+    accounts: [
+      account('Cuenta RUT', 300000, { id: 'cuenta-rut' }),
+      account('Tarjeta CMR', -45000, { id: 'cmr', type: 'credit_card', payment_day: Number(hoy.slice(8)) }),
+    ],
+    recurring_rules: [{
+      type: 'expense', amount: 25990, account_id: 'cuenta-rut', to_account_id: null, category_id: null, note: 'Internet',
+      tags: [], frequency: 'monthly', interval_count: 1, start_date: en5dias, end_date: null, occurrence_count: 0,
+      next_date: en5dias, active: true,
+    }],
+  })
+  await db.install(page, { signedIn: true })
+  await page.goto('/')
+
+  const section = page.getByRole('region', { name: 'Próximos pagos' })
+  await expect(section.getByText('Pagar Tarjeta CMR')).toBeVisible()
+  await expect(section.getByText('Internet')).toBeVisible()
+  await expect(section.getByText(/^Hoy ·/)).toBeVisible()
+  await expect(section.getByText('En 5 días', { exact: false })).toBeVisible()
+  await expect(section).toContainText('$70.990')
+
+  await section.getByRole('button', { name: 'Pagar Tarjeta CMR: registrar el pago' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Pagar tarjeta' })
+  await expect(dialog.getByLabel('Monto')).toHaveValue('$45.000')
+  await dialog.getByLabel('Desde').selectOption({ label: 'Cuenta RUT' })
+  await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+
+  expect(db.tables.transactions).toMatchObject([{ type: 'transfer', amount: 45000, account_id: 'cuenta-rut', to_account_id: 'cmr' }])
+  await expect(section.getByText('Pagar Tarjeta CMR')).toBeHidden()
+  await expect(section).toContainText('$25.990')
+})

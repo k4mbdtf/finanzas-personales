@@ -51,8 +51,9 @@ export class FakeSupabase {
   private nextId = 1000
   private token = 'token-de-ana'
 
-  constructor(seed: { accounts?: Row[] } = {}) {
-    for (const a of seed.accounts ?? []) this.insert('accounts', a)
+  /** Filas iniciales por tabla (accounts, recurring_rules...): se les agrega id, user_id y created_at. */
+  constructor(seed: Record<string, Row[]> = {}) {
+    for (const [table, rows] of Object.entries(seed)) rows.forEach((r) => this.insert(table, r))
   }
 
   get categories() { return this.tables.categories }
@@ -235,6 +236,7 @@ function matches(value: unknown, expr: string): boolean {
     case 'gte': return v != null && v >= arg
     case 'lte': return v != null && v <= arg
     case 'is': return arg === 'null' ? value == null : String(value) === arg
+    case 'not': return !matches(value, arg)
     case 'cs': return Array.isArray(value) && arg.replace(/^\{|\}$/g, '').split(',').every((x) => value.includes(x))
     case 'ilike': {
       const re = new RegExp(`^${arg.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`, 'i')
