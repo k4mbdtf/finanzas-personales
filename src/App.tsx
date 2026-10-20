@@ -20,6 +20,7 @@ import MorePage from '@/pages/MorePage'
 // app abre rápido en el celular (las de gráficos traen Recharts, ~100 kB).
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
 const NetWorthPage = lazy(() => import('@/features/networth/NetWorthPage'))
+const YearPage = lazy(() => import('@/features/annual/YearPage'))
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'))
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'))
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'))
@@ -91,6 +92,7 @@ export default function App() {
               <Route path="/recurrentes" element={page(<RecurringPage />)} />
               <Route path="/importar" element={page(<ImportPage />)} />
               <Route path="/patrimonio" element={page(<NetWorthPage />)} />
+              <Route path="/anual" element={page(<YearPage />)} />
               <Route path="/mas" element={<MorePage />} />
               <Route path="/ajustes" element={page(<SettingsPage />)} />
             </Route>

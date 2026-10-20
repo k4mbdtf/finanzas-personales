@@ -53,7 +53,8 @@ src/
                          events (recarga automática), icons (nombres de íconos y colores),
                          theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
                          csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
-                         cuenta), institutions (bancos), investments, upcoming (próximos pagos)
+                         cuenta), institutions (bancos), investments, upcoming (próximos pagos),
+                         yearSummary (resumen anual)
                          (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
@@ -74,6 +75,7 @@ src/
   features/recurring/    Movimientos recurrentes
   features/import/       Importar cartolas CSV (rows.ts + pruebas)
   features/networth/     Patrimonio neto en el tiempo
+  features/annual/       Resumen anual
   components/nav.ts      Secciones del menú (agregar una sección = una línea aquí + ruta en App.tsx)
   pages/                 Auth, Ajustes, Más (celular), Privacidad
 ```
@@ -205,6 +207,11 @@ inversión y en total, y avisa si hace más de un mes que no actualizas el valor
 **Rescatar** mueven dinero de tus cuentas sin contar como gasto ni ingreso; **Actualizar valor**
 anota lo que muestra la app de tu banco o corredora. El detalle (`/#/inversiones/<id>`) tiene un
 gráfico de valor vs aportado (con vista de tabla), los valores registrados y los movimientos.
+
+**Resumen anual** (`/#/anual`): ingresos, gastos, ahorro (con %) y gasto promedio al mes del año,
+comparados con el año anterior (si el año va en curso, con el mismo período: enero hasta este mes),
+el mes con más gasto y el con más ahorro, barras mes a mes y gasto por categoría con su % y la
+diferencia con el año anterior. Lógica en `src/lib/yearSummary.ts` (+ pruebas).
 
 **Metas** (`/#/metas`), **Recurrentes** (`/#/recurrentes`), **Importar cartola** (`/#/importar`) y
 **Patrimonio** (`/#/patrimonio`, línea de 12 o 24 meses con vista de tabla). En el celular están en

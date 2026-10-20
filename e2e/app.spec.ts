@@ -144,3 +144,43 @@ test('próximos pagos: muestra lo que vence y pagar la tarjeta la saca de la lis
   await expect(section.getByText('Pagar Tarjeta CMR')).toBeHidden()
   await expect(section).toContainText('$25.990')
 })
+
+test('resumen anual: totales del año, comparación con el anterior y gasto por categoría', async ({ page }) => {
+  const year = Number(today().slice(0, 4))
+  const db = new FakeSupabase({ accounts: [account('Cuenta RUT', 0, { id: 'rut' })] })
+  const [comida, transporte, sueldo] = db.categories.map((c) => c.id)
+  const tx = (type: string, amount: number, date: string, category_id: unknown) => ({ type, amount, date, account_id: 'rut', category_id })
+  db.tables.transactions.push(
+    ...[
+      tx('income', 1_000_000, `${year}-01-05`, sueldo), tx('expense', 300_000, `${year}-01-10`, comida),
+      tx('income', 1_000_000, `${year}-02-05`, sueldo), tx('expense', 500_000, `${year}-02-10`, transporte),
+      tx('expense', 200_000, `${year - 1}-01-10`, comida), tx('income', 800_000, `${year - 1}-01-05`, sueldo),
+      // Después de diciembre del año anterior ya no cuenta para "a la fecha" si el año va en curso.
+      tx('expense', 999_000, `${year - 1}-12-31`, transporte),
+    ].map((t, i) => ({ id: `tx-${i}`, user_id: 'u', created_at: '', to_account_id: null, note: null, tags: [], ...t })),
+  )
+  await db.install(page, { signedIn: true })
+  await page.goto('/#/anual')
+
+  await expect(page.getByRole('heading', { name: 'Resumen anual' })).toBeVisible()
+  const kpi = (label: RegExp) => page.locator('.card', { has: page.locator('.label-caps', { hasText: label }) })
+  await expect(kpi(/^Ingresos$/)).toContainText('$2.000.000')
+  await expect(kpi(/^Gastos$/)).toContainText('$800.000')
+  await expect(kpi(/^Ahorro · 60%$/)).toContainText('$1.200.000')
+  await expect(kpi(/^Gasto promedio al mes$/)).toContainText('$400.000')
+  // Año en curso: compara con el mismo período del año anterior (enero hasta este mes).
+  const month = new Intl.DateTimeFormat('es-CL', { month: 'short', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, Number(today().slice(5, 7)) - 1, 1))).replace('.', '')
+  await expect(kpi(/^Gastos$/)).toContainText(`vs ene–${month} ${year - 1}`)
+
+  const rows = page.getByRole('table', { name: /Gasto por categoría/ }).getByRole('row')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(1)).toContainText('Transporte')
+  await expect(rows.nth(1)).toContainText('Nueva')
+  await expect(rows.nth(2)).toContainText('Comida')
+  await expect(rows.nth(2)).toContainText('+$100.000')
+
+  await page.getByRole('button', { name: `Año anterior: ${year - 1}` }).click()
+  await expect(kpi(/^Gastos$/)).toContainText('$1.199.000')
+  await expect(kpi(/^Gastos$/)).toContainText(`Sin datos de ${year - 2}`)
+})

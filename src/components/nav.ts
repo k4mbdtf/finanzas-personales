@@ -2,7 +2,7 @@
 //   MAIN_NAV: barra inferior en celular (4 + "Más") y arriba en la sidebar.
 //   MORE_NAV: en celular se llega desde la página "Más"; en escritorio, sidebar.
 import {
-  ArrowLeftRight, ChartLine, FileUp, HandCoins, House, PiggyBank, Repeat, Settings, Tags, Target, TrendingUp, Wallet,
+  ArrowLeftRight, CalendarRange, ChartLine, FileUp, HandCoins, House, PiggyBank, Repeat, Settings, Tags, Target, TrendingUp, Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -21,6 +21,7 @@ export const MORE_NAV: NavItem[] = [
   { to: '/metas', label: 'Metas de ahorro', icon: PiggyBank, hint: 'Ahorra para algo y sigue tu avance' },
   { to: '/recurrentes', label: 'Recurrentes', icon: Repeat, hint: 'Sueldo, arriendo y suscripciones automáticas' },
   { to: '/patrimonio', label: 'Patrimonio', icon: ChartLine, hint: 'Lo que tienes menos lo que debes, mes a mes' },
+  { to: '/anual', label: 'Resumen anual', icon: CalendarRange, hint: 'Tu año: ingresos, gastos, ahorro y categorías vs el año anterior' },
   { to: '/importar', label: 'Importar cartola', icon: FileUp, hint: 'Carga los movimientos de tu banco desde un CSV' },
   { to: '/categorias', label: 'Categorías', icon: Tags, hint: 'Colores, íconos y categorías propias' },
   { to: '/ajustes', label: 'Ajustes', icon: Settings, hint: 'Tema, exportar datos, contraseña y cuenta' },
