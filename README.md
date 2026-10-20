@@ -37,6 +37,7 @@ supabase/migrations/
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 supabase/email-templates/ Correos de confirmación y recuperación en español
 .github/workflows/
+  ci.yml                 Tipos + pruebas unitarias + build + pruebas SQL en cada push a otra rama
   deploy.yml             Pruebas + build + publicación en GitHub Pages en cada push a main
   keepalive.yml          Ping a Supabase cada 3 días
 public/                  manifest.webmanifest, sw.js (service worker), íconos
@@ -304,8 +305,9 @@ npm run dev                    # http://localhost:5173
 
 ### 5. Pruebas
 
-Hay tres niveles; los dos primeros no tocan Supabase y corren también en GitHub Actions antes de
-cada despliegue:
+Hay tres niveles; los dos primeros no tocan Supabase y corren también en GitHub Actions: en cada
+push a una rama que no sea `main` (`ci.yml`, el resultado se ve en el pull request) y antes de cada
+despliegue (`deploy.yml`):
 
 ```bash
 npm run test:unit   # lógica pura: CSV de bancos, fechas recurrentes, deudas, metas, bancos,
@@ -391,6 +393,8 @@ correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commi
   ejecútala en el SQL Editor, actualiza `src/types.ts` y agrega su prueba en `scripts/test-isolation.mjs`.
 - **Agregar una pantalla:** archivo en `src/features/<x>/`, ruta en `App.tsx`, entrada en `NAV`.
 - **Forzar que los usuarios reciban una versión nueva del service worker:** sube `VERSION` en `public/sw.js`
-  (normalmente no hace falta: el HTML se pide siempre a la red primero).
+  (normalmente no hace falta: el HTML se pide siempre a la red primero, y al abrir la app con
+  internet el SW borra del caché los JS/CSS que ya no están en `asset-manifest.json`, la lista de
+  archivos del build que genera Vite).
 - **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run preview` ·
   `npm run test:unit` · `npm run test:sql` · `npm run seed` · `npm run test:isolation`.

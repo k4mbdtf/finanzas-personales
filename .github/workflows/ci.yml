@@ -1,0 +1,43 @@
+# Pruebas en cada push a una rama que no sea main (el resultado aparece también
+# en su pull request), para detectar errores antes de llegar a main. No publica
+# nada ni usa secrets: main lo prueba y despliega deploy.yml.
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Tipos, pruebas unitarias y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Chequeo de tipos
+        run: npm run typecheck
+      - name: Pruebas unitarias
+        run: npm run test:unit
+      - name: Build
+        run: npx vite build
+
+  sql:
+    name: Pruebas SQL (migraciones en PostgreSQL desechable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run test:sql

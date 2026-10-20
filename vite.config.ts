@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
   return {
     base: env.VITE_BASE || '/',
     plugins: [react(), tailwindcss()],
+    // Lista de todos los archivos del build: public/sw.js la usa para borrar del
+    // caché los JS/CSS de despliegues anteriores.
+    build: { manifest: 'asset-manifest.json' },
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
