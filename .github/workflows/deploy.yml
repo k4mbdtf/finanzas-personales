@@ -30,6 +30,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Lint (ESLint)
+        run: npm run lint
       - name: Pruebas unitarias
         run: npm run test:unit
       - name: Pruebas SQL (migraciones en PostgreSQL desechable)

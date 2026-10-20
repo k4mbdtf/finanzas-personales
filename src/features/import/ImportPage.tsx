@@ -86,12 +86,12 @@ export default function ImportPage() {
 
   const headers = table[headerRow] ?? []
   const columns = headers.map((h, i) => ({ i, label: `${colLetter(i)}: ${h || '(sin título)'}` }))
-  const effective: Mapping = twoCols
+  const effective = useMemo<Mapping>(() => (twoCols
     ? { ...mapping, amount: null }
-    : { ...mapping, debit: null, credit: null, amount: mapping.amount ?? -1 }
+    : { ...mapping, debit: null, credit: null, amount: mapping.amount ?? -1 }), [twoCols, mapping])
   const preview = useMemo(
     () => (step === 'map' ? buildRows(table.slice(0, headerRow + 7), headerRow, effective, order, invert) : []),
-    [step, table, headerRow, JSON.stringify(effective), order, invert],
+    [step, table, headerRow, effective, order, invert],
   )
 
   function reset(keepResult = false) {

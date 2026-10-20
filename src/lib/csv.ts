@@ -9,7 +9,7 @@ export function decodeText(bytes: ArrayBuffer | Uint8Array): string {
   } catch {
     text = new TextDecoder('windows-1252').decode(bytes)
   }
-  return text.replace(/^﻿/, '')
+  return text.replace(/^\uFEFF/, '')
 }
 
 /** Elige el separador más consistente entre ; , tab y | en las primeras líneas. */

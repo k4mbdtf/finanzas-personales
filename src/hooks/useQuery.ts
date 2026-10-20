@@ -27,6 +27,9 @@ export function useQuery<T>(fn: () => Promise<T>, deps: unknown[], topics: Topic
         alive && setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : 'Error inesperado' })),
       )
     return () => { alive = false }
+    // `deps` las entrega quien llama (como en useEffect) y ESLint las revisa en cada
+    // llamada a useQuery (exhaustive-deps con additionalHooks en eslint.config.js).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, version])
 
   return { ...state, reload: () => setVersion((v) => v + 1) }
