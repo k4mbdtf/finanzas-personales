@@ -184,3 +184,54 @@ test('resumen anual: totales del año, comparación con el anterior y gasto por 
   await expect(kpi(/^Gastos$/)).toContainText('$1.199.000')
   await expect(kpi(/^Gastos$/)).toContainText(`Sin datos de ${year - 2}`)
 })
+
+test.describe('reglas de categorización', () => {
+  test('crear una regla y aplicarla a los movimientos sin categoría', async ({ page }) => {
+    const db = new FakeSupabase({
+      accounts: [account('Cuenta RUT', 100000, { id: 'rut' })],
+      transactions: [
+        { type: 'expense', amount: 8500, date: today(), account_id: 'rut', category_id: null, note: 'PAGO UBER *TRIP 8812' },
+        { type: 'expense', amount: 3000, date: today(), account_id: 'rut', category_id: null, note: 'Kiosko' },
+      ],
+    })
+    const transporte = db.categories[1]
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/categorias')
+
+    const section = page.getByRole('region', { name: 'Reglas automáticas' })
+    await section.getByLabel('Si la descripción contiene').fill('Uber')
+    await section.getByLabel('Usar la categoría').selectOption({ label: 'Transporte' })
+    await section.getByRole('button', { name: 'Agregar regla' }).click()
+    await expect(section.getByRole('list', { name: 'Reglas' })).toContainText('«Uber»')
+    expect(db.tables.category_rules).toMatchObject([{ pattern: 'Uber', category_id: transporte.id }])
+
+    await section.getByRole('button', { name: 'Aplicar a movimientos sin categoría' }).click()
+    const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Aplicar reglas' }))
+    await expect(dialog).toContainText('1 movimiento sin categoría calza')
+    await dialog.getByRole('button', { name: 'Aplicar' }).click()
+    await expect(page.getByText('Se categorizaron 1 movimiento')).toBeVisible()
+    expect(db.tables.transactions.map((t) => t.category_id)).toEqual([transporte.id, null])
+  })
+
+  test('al importar una cartola, la regla elige la categoría', async ({ page }) => {
+    const db = new FakeSupabase({ accounts: [account('Cuenta RUT', 100000, { id: 'rut' })] })
+    db.tables.category_rules = [{ id: 'r1', user_id: 'u', pattern: 'uber', category_id: db.categories[1].id, created_at: '' }]
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/importar')
+
+    const csv = 'Fecha;Descripción;Monto\n15/10/2026;PAGO UBER TRIP 123;-8.500\n16/10/2026;JUMBO LAS CONDES;-45.000\n'
+    await page.locator('input[type=file]').setInputFiles({ name: 'cartola.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
+    await page.getByRole('button', { name: 'Revisar movimientos' }).click()
+    await expect(page.getByLabel('Categoría de la fila 2')).toHaveValue(db.categories[1].id as string)
+    await expect(page.getByLabel('Categoría de la fila 3')).toHaveValue('')
+  })
+
+  test('sin la migración 0007, la sección avisa qué hacer y el resto funciona', async ({ page }) => {
+    const db = new FakeSupabase({ accounts: [account('Cuenta RUT', 100000)] })
+    db.missing.add('category_rules')
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/categorias')
+    await expect(page.getByText('0007_reglas.sql')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Comida/ })).toBeVisible()
+  })
+})

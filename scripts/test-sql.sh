@@ -4,7 +4,8 @@
 #
 # Orden: imitación de Supabase -> migraciones 0001..0004 -> datos "existentes"
 #        -> 0005 (sobre esos datos) -> pruebas de la Etapa 2 -> más datos "existentes"
-#        -> 0006 (sobre esos datos) -> pruebas de deudas, bancos e inversiones.
+#        -> 0006 (sobre esos datos) -> pruebas de deudas, bancos e inversiones
+#        -> 0007 -> pruebas de reglas de categorización.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -36,3 +37,5 @@ run supabase/tests/20_etapa2.sql
 run supabase/tests/25_data_before_0006.sql
 run supabase/migrations/0006_deudas_inversiones.sql
 run supabase/tests/30_deudas_inversiones.sql
+run supabase/migrations/0007_reglas.sql
+run supabase/tests/40_reglas.sql

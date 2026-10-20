@@ -6,6 +6,7 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useRefData } from '@/context/RefData'
 import { categoryMemory, deleteBatch, existingHashes, importRows, listBatches, manualKeys, type ImportPayloadRow } from '@/data/imports'
+import { listCategoryRules } from '@/data/rules'
 import { useQuery } from '@/hooks/useQuery'
 import {
   decodeText, detectDelimiter, guessDateOrder, guessHeaderRow, guessMapping, normalizeForMatch, parseCSV,
@@ -15,6 +16,7 @@ import {
   ArrowRight, Check, ChevronLeft, ChevronRight, FileSpreadsheet, FileUp, ListChecks, RefreshCw, TriangleAlert, Undo2, X,
 } from 'lucide-react'
 import { formatCLP, formatDate } from '@/lib/format'
+import { matchRule } from '@/lib/rules'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { IconTile } from '@/components/icons'
 import { Alert, Badge, Button, Card, Checkbox, Loading, PageHeader, SectionHeader, Segmented, Select } from '@/components/ui'
@@ -146,11 +148,13 @@ export default function ImportPage() {
         return setError('Ninguna fila tiene fecha y monto válidos. Revisa las columnas y el formato de fecha.')
       }
       const dates = valid.map((r) => r.date!).sort()
-      const [existing, manual, memory] = await Promise.all([
+      const [existing, manual, memory, rules] = await Promise.all([
         existingHashes(hashes.filter((h): h is string => !!h)),
         manualKeys(accountId, dates[0], dates[dates.length - 1]),
         categoryMemory(),
+        listCategoryRules(),
       ])
+      const kindOf = (id: string) => categoryById.get(id)?.kind
       setReview(rows.map((r, i) => {
         const hash = hashes[i]
         const type = (r.amount ?? 0) < 0 ? 'expense' as const : 'income' as const
@@ -158,7 +162,9 @@ export default function ImportPage() {
           : existing.has(hash!) ? 'imported'
           : manual.has(`${r.date}|${type}|${Math.abs(r.amount!)}`) ? 'possible'
           : 'new'
-        const suggested = memory.get(`${type}|${normalizeForMatch(r.description)}`)
+        // Primero las reglas del usuario; si ninguna calza, la categoría usada antes para esa descripción.
+        const suggested = matchRule(rules ?? [], r.description, type, kindOf)?.category_id
+          ?? memory.get(`${type}|${normalizeForMatch(r.description)}`)
         const cat = suggested ? categoryById.get(suggested) : undefined
         return {
           ...r, hash, type, status, include: status === 'new',
