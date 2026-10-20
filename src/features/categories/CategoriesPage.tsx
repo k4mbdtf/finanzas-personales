@@ -6,6 +6,7 @@ import { Modal } from '@/components/Modal'
 import { Alert, Button, Loading, PageHeader, Segmented } from '@/components/ui'
 import type { Category, CategoryKind } from '@/types'
 import { CategoryForm } from './CategoryForm'
+import { RulesSection } from './RulesSection'
 
 export default function CategoriesPage() {
   const { categories, loading, error } = useRefData()
@@ -42,6 +43,8 @@ export default function CategoriesPage() {
           )}
         </>
       )}
+
+      <RulesSection />
 
       <Modal open={editing !== null} onClose={() => setEditing(null)}
         title={editing === 'new' ? 'Nueva categoría' : 'Editar categoría'}>

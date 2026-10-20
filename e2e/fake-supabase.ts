@@ -46,6 +46,8 @@ export class FakeSupabase {
   tables: Record<string, Row[]> = {
     profiles: [], accounts: [], categories: structuredClone(CATEGORIES), transactions: [], budgets: [],
   }
+  /** Tablas que "no existen" (migración sin aplicar): responden como PostgREST, con PGRST205. */
+  missing = new Set<string>()
   /** Peticiones REST recibidas (método + ruta con query), para revisar qué consultó la app. */
   requests: { method: string; path: string; params: URLSearchParams }[] = []
   private nextId = 1000
@@ -98,6 +100,9 @@ export class FakeSupabase {
     const name = path.slice('/rest/v1/'.length)
     this.requests.push({ method: req.method(), path: `${path}${url.search}`, params: url.searchParams })
 
+    if (this.missing.has(name)) {
+      return route.fulfill({ status: 404, json: { code: 'PGRST205', message: `Could not find the table 'public.${name}' in the schema cache` } })
+    }
     if (name.startsWith('rpc/')) return route.fulfill({ json: this.rpc(name.slice(4), req.postDataJSON() ?? {}) })
 
     const prefer = req.headers()['prefer'] ?? ''
@@ -237,6 +242,7 @@ function matches(value: unknown, expr: string): boolean {
     case 'lte': return v != null && v <= arg
     case 'is': return arg === 'null' ? value == null : String(value) === arg
     case 'not': return !matches(value, arg)
+    case 'in': return arg.replace(/^\(|\)$/g, '').split(',').includes(String(value))
     case 'cs': return Array.isArray(value) && arg.replace(/^\{|\}$/g, '').split(',').every((x) => value.includes(x))
     case 'ilike': {
       const re = new RegExp(`^${arg.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`, 'i')

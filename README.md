@@ -34,6 +34,7 @@ supabase/migrations/
   0004_keepalive.sql            RPC keepalive() para el workflow anti-pausa
   0005_etapa2.sql               Deudas, metas, recurrentes, cuotas, importaciones, patrimonio
   0006_deudas_inversiones.sql   Deudas fuera de Cuentas, banco de cada cuenta, inversiones
+  0007_reglas.sql               Reglas de categorización (texto → categoría)
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 e2e/                     Pruebas de punta a punta (Playwright) con Supabase simulado (fake-supabase.ts)
 supabase/email-templates/ Correos de confirmación y recuperación en español
@@ -54,7 +55,7 @@ src/
                          theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
                          csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
                          cuenta), institutions (bancos), investments, upcoming (próximos pagos),
-                         yearSummary (resumen anual)
+                         yearSummary (resumen anual), rules (reglas de categorización)
                          (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
@@ -110,6 +111,7 @@ auth.users (Supabase)
   └─ recurring_rules                 plantilla + frecuencia; generan transactions
   └─ installment_plans               compra en cuotas; sus cuotas son transactions
   └─ import_batches                  cada cartola importada (para deshacer)
+  └─ category_rules                  "si contiene <texto>, usa <categoría>" (0007)
 views: account_balances (saldo, entradas y salidas por cuenta), goal_progress (avance de metas),
        investment_status (aportado, rescatado y valor actual) — todas security_invoker
 ```
@@ -173,6 +175,14 @@ presupuesto, aparece un aviso.
 personalizables (nombre, ícono, color). El tipo (gasto/ingreso) no se puede cambiar si la categoría
 ya tiene movimientos (lo valida la BD). Eliminar una categoría deja sus movimientos "Sin categoría";
 archivarla la oculta de los formularios y conserva el historial.
+
+**Reglas automáticas** (en Categorías, requiere la migración 0007): "si la descripción contiene
+*UBER*, usa *Transporte*". Al importar una cartola, las reglas eligen la categoría antes que la
+sugerencia por movimientos anteriores, y un botón las aplica a los movimientos sin categoría. La
+comparación ignora mayúsculas, tildes y signos y es por palabras completas ("bip" no calza en
+"bipolar"); si calzan varias, gana la de texto más largo. Una regla vale para gastos o ingresos
+según el tipo de su categoría y se elimina con ella. Sin la migración, la sección explica qué
+ejecutar y el resto de la app funciona igual. Lógica en `src/lib/rules.ts` (+ pruebas).
 
 **Presupuestos** (`/#/presupuestos`): monto mensual por categoría de gasto. Barra de progreso
 verde, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del límite",
