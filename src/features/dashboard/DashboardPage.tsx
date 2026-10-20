@@ -1,5 +1,6 @@
 // Inicio / Dashboard: KPIs, alertas de presupuesto, dona de gastos,
 // ingresos vs gastos de 12 meses y últimos movimientos del mes seleccionado.
+import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Plus, Rocket, TriangleAlert } from 'lucide-react'
 import { useMonth } from '@/context/Month'
@@ -14,9 +15,15 @@ import { Alert, Button, Card, EmptyState, PageHeader, SectionHeader, buttonLinkC
 import { BudgetProgress } from '@/features/budgets/BudgetProgress'
 import { TransactionList } from '@/features/transactions/TransactionList'
 import { useTransactionDrawer } from '@/features/transactions/TransactionDrawer'
-import { IncomeExpenseChart } from './IncomeExpenseChart'
 import { Kpis } from './Kpis'
-import { SpendingDonut } from './SpendingDonut'
+
+// Los gráficos traen Recharts (~107 kB gzip): se descargan en paralelo a los datos
+// (la descarga parte al cargar este módulo) sin bloquear los KPIs ni la lista.
+const donutModule = import('./SpendingDonut')
+const barsModule = import('./IncomeExpenseChart')
+const SpendingDonut = lazy(() => donutModule.then((m) => ({ default: m.SpendingDonut })))
+const IncomeExpenseChart = lazy(() => barsModule.then((m) => ({ default: m.IncomeExpenseChart })))
+const chartFallback = <span className="skeleton block h-64 w-full" role="status" aria-label="Cargando gráfico…" />
 
 export default function DashboardPage() {
   const { month } = useMonth()
@@ -76,11 +83,11 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <SectionHeader title="Gastos por categoría" />
-          <SpendingDonut spending={spending} />
+          <Suspense fallback={chartFallback}><SpendingDonut spending={spending} /></Suspense>
         </Card>
         <Card>
           <SectionHeader title="Ingresos y gastos · 12 meses" />
-          <IncomeExpenseChart data={totals} />
+          <Suspense fallback={chartFallback}><IncomeExpenseChart data={totals} /></Suspense>
         </Card>
       </div>
 

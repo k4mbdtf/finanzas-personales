@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
-    "@supabase/supabase-js": "^2.118.0",
+    "@supabase/auth-js": "^2.118.0",
+    "@supabase/postgrest-js": "^2.118.0",
     "lucide-react": "^1.59.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -23,6 +24,7 @@
     "recharts": "^2.15.4"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
     "@types/react": "^18.3.31",
