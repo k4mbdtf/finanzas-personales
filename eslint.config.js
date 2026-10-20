@@ -10,7 +10,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules'] },
+  { ignores: ['dist', 'dist-e2e', 'node_modules', 'test-results', 'playwright-report'] },
   {
     files: ['src/**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -23,7 +23,8 @@ export default tseslint.config(
     },
   },
   {
-    files: ['vite.config.ts'],
+    // Configuración y pruebas de punta a punta (Node).
+    files: ['vite.config.ts', 'playwright.config.ts', 'e2e/**/*.ts'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { globals: globals.node },
   },

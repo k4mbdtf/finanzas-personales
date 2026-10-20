@@ -35,9 +35,10 @@ supabase/migrations/
   0005_etapa2.sql               Deudas, metas, recurrentes, cuotas, importaciones, patrimonio
   0006_deudas_inversiones.sql   Deudas fuera de Cuentas, banco de cada cuenta, inversiones
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
+e2e/                     Pruebas de punta a punta (Playwright) con Supabase simulado (fake-supabase.ts)
 supabase/email-templates/ Correos de confirmación y recuperación en español
 .github/workflows/
-  ci.yml                 Lint + tipos + pruebas unitarias + build + pruebas SQL en cada push a otra rama
+  ci.yml                 Lint, tipos, build y pruebas (unitarias, SQL y Playwright) en cada push a otra rama
   deploy.yml             Pruebas + build + publicación en GitHub Pages en cada push a main
   keepalive.yml          Ping a Supabase cada 3 días
 public/                  manifest.webmanifest, sw.js (service worker), íconos
@@ -305,7 +306,7 @@ npm run dev                    # http://localhost:5173
 
 ### 5. Pruebas
 
-Hay tres niveles; los dos primeros no tocan Supabase y corren también en GitHub Actions: en cada
+Hay cuatro niveles; los tres primeros no tocan Supabase y corren también en GitHub Actions: en cada
 push a una rama que no sea `main` (`ci.yml`, el resultado se ve en el pull request) y antes de cada
 despliegue (`deploy.yml`):
 
@@ -314,6 +315,9 @@ npm run test:unit   # lógica pura: CSV de bancos, fechas recurrentes, deudas, m
                     # inversiones (node --test)
 npm run test:sql    # aplica TODAS las migraciones en un PostgreSQL desechable (Docker) y prueba
                     # reglas, RPCs, aislamiento entre usuarios, permisos de anon y borrado en cascada
+npm run test:e2e    # abre la app compilada en Chromium (celular y escritorio) y recorre los flujos
+                    # principales: ingresar, crear la primera cuenta, registrar un gasto y verlo en
+                    # el resumen, el saldo y movimientos, validaciones, búsqueda y cerrar sesión
 ```
 
 `test:sql` necesita Docker en ejecución. Imita lo mínimo de Supabase (`supabase/tests/00_supabase_stub.sql`),
@@ -321,7 +325,15 @@ aplica 0001–0004, carga datos "existentes" y recién ahí aplica 0005; luego c
 esquema de 0005 (deudas anotadas como cuentas, incluso con gastos por error) y aplica 0006, para
 verificar que cada migración funciona sobre datos reales.
 
-El tercer nivel prueba contra la API real de tu proyecto:
+`test:e2e` compila la app apuntando a un Supabase ficticio y la sirve con `vite preview`. Cada prueba
+intercepta las llamadas con `e2e/fake-supabase.ts`, un Supabase en memoria (Auth y la API REST con
+los filtros que usa la app, la vista `account_balances` y las RPC del resumen), así que no necesita
+proyecto ni credenciales. La primera vez instala el navegador con `npx playwright install chromium`
+(o usa uno ya instalado con `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/ruta/a/chrome`). Si una pantalla nueva
+consulta algo que el simulado no conoce, se agrega ahí. Si falla en el CI, el reporte queda como
+artefacto `playwright-report` del run.
+
+El cuarto nivel prueba contra la API real de tu proyecto:
 
 #### Datos de prueba y pruebas de aislamiento (API real)
 
@@ -404,4 +416,4 @@ correo; si pasa, vuelve a activarlo en la pestaña Actions o haz cualquier commi
   las de hooks de React. `exhaustive-deps` también revisa las dependencias de cada `useQuery`. Cualquier
   aviso hace fallar el CI (`--max-warnings 0`).
 - **Comandos:** `npm run dev` · `npm run build` (incluye chequeo de tipos) · `npm run lint` · `npm run preview` ·
-  `npm run test:unit` · `npm run test:sql` · `npm run seed` · `npm run test:isolation`.
+  `npm run test:unit` · `npm run test:sql` · `npm run test:e2e` · `npm run seed` · `npm run test:isolation`.
