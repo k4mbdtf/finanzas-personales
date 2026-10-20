@@ -1,5 +1,5 @@
 // Lista de movimientos agrupada por día. Se reutiliza en Inicio (últimos movimientos).
-import { CreditCard, HandCoins, Repeat, TrendingUp, type LucideIcon } from 'lucide-react'
+import { CreditCard, HandCoins, Repeat, Split, TrendingUp, type LucideIcon } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { dayLabel } from '@/lib/dates'
 import { formatCLP } from '@/lib/format'
@@ -73,6 +73,11 @@ function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) =>
             {tx.recurring_rule_id && (
               <span title="Recurrente" className="shrink-0 text-muted">
                 <Repeat size={13} strokeWidth={2} aria-hidden /><span className="sr-only"> (recurrente)</span>
+              </span>
+            )}
+            {tx.split_group && (
+              <span title="Parte de un movimiento dividido" className="shrink-0 text-muted">
+                <Split size={13} strokeWidth={2} aria-hidden /><span className="sr-only"> (dividido)</span>
               </span>
             )}
           </span>

@@ -48,6 +48,8 @@ export class FakeSupabase {
   }
   /** Tablas que "no existen" (migración sin aplicar): responden como PostgREST, con PGRST205. */
   missing = new Set<string>()
+  /** Columnas que "no existen" (p. ej. split_group sin la migración 0008): pedirlas da 42703. */
+  missingColumns = new Set<string>()
   /** Peticiones REST recibidas (método + ruta con query), para revisar qué consultó la app. */
   requests: { method: string; path: string; params: URLSearchParams }[] = []
   private nextId = 1000
@@ -79,7 +81,7 @@ export class FakeSupabase {
     const full = { id: uuid(this.nextId++), user_id: USER.id, created_at: new Date().toISOString(), ...row }
     if (table === 'transactions') {
       Object.assign(full, { to_account_id: null, category_id: null, note: null, tags: [], recurring_rule_id: null,
-        installment_plan_id: null, installment_no: null, import_batch_id: null, ...row })
+        installment_plan_id: null, installment_no: null, import_batch_id: null, split_group: null, ...row })
     }
     ;(this.tables[table] ??= []).push(full)
     return full
@@ -104,6 +106,10 @@ export class FakeSupabase {
       return route.fulfill({ status: 404, json: { code: 'PGRST205', message: `Could not find the table 'public.${name}' in the schema cache` } })
     }
     if (name.startsWith('rpc/')) return route.fulfill({ json: this.rpc(name.slice(4), req.postDataJSON() ?? {}) })
+
+    const select = url.searchParams.get('select') ?? ''
+    const unknown = select.split(',').find((c) => this.missingColumns.has(c.trim()))
+    if (unknown) return route.fulfill({ status: 400, json: { code: '42703', message: `column ${name}.${unknown} does not exist` } })
 
     const prefer = req.headers()['prefer'] ?? ''
     const returnRows = prefer.includes('return=representation')
@@ -205,6 +211,22 @@ export class FakeSupabase {
     switch (fn) {
       case 'materialize_recurring':
         return 0
+      case 'save_split': {
+        // Igual que public.save_split (0008): el ancla conserva su id; las demás partes se reemplazan.
+        const parts = args.p_parts as { category_id: string; amount: number }[]
+        const anchor = args.p_anchor ? txs.find((t) => t.id === args.p_anchor) : undefined
+        const group = (anchor?.split_group as string | undefined) ?? `grupo-${this.nextId++}`
+        const base = { type: args.p_type, date: args.p_date, account_id: args.p_account_id, note: args.p_note || null, tags: args.p_tags ?? [] }
+        const splitGroup = parts.length > 1 ? group : null
+        if (anchor) {
+          this.tables.transactions = txs.filter((t) => t.split_group !== group || t === anchor)
+          Object.assign(anchor, base, { to_account_id: null, category_id: parts[0].category_id, amount: parts[0].amount, split_group: splitGroup })
+        } else {
+          this.insert('transactions', { ...base, category_id: parts[0].category_id, amount: parts[0].amount, split_group: splitGroup })
+        }
+        for (const p of parts.slice(1)) this.insert('transactions', { ...base, category_id: p.category_id, amount: p.amount, split_group: group })
+        return splitGroup
+      }
       case 'monthly_totals': {
         const byMonth = new Map<string, { month: string; income: number; expense: number }>()
         for (const t of txs.filter((t) => inRange(t) && t.type !== 'transfer')) {

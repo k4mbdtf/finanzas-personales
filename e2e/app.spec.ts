@@ -235,3 +235,77 @@ test.describe('reglas de categorización', () => {
     await expect(page.getByRole('button', { name: /Comida/ })).toBeVisible()
   })
 })
+
+test.describe('dividir movimientos', () => {
+  let db: FakeSupabase
+  test.beforeEach(async ({ page }) => {
+    db = new FakeSupabase({ accounts: [account('Cuenta RUT', 100000, { id: 'rut' })] })
+    await db.install(page, { signedIn: true })
+  })
+
+  test('dividir un gasto en dos categorías, editarlo y quitar la división', async ({ page }) => {
+    const [comida, transporte] = db.categories.map((c) => c.id)
+    await page.goto('/#/movimientos')
+    await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
+    const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
+    await dialog.getByLabel('Monto').fill('50000')
+    await dialog.getByRole('button', { name: 'Dividir en varias categorías' }).click()
+    await expect(dialog.getByText('Falta repartir $50.000')).toBeVisible()
+    await dialog.getByLabel('Categoría de la parte 1').selectOption({ label: 'Comida' })
+    await dialog.getByLabel('Monto de la parte 1').fill('30000')
+    await dialog.getByLabel('Categoría de la parte 2').selectOption({ label: 'Transporte' })
+    await dialog.getByLabel('Monto de la parte 2').fill('25000')
+    await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await expect(dialog.getByText('Las partes deben sumar el total.')).toBeVisible()
+    await expect(dialog.getByText('Sobran $5.000')).toBeVisible()
+    await dialog.getByLabel('Monto de la parte 2').fill('20000')
+    await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    expect(db.tables.transactions).toHaveLength(2)
+    expect(db.tables.transactions).toMatchObject([
+      { type: 'expense', amount: 30000, category_id: comida, split_group: expect.any(String) },
+      { type: 'expense', amount: 20000, category_id: transporte, split_group: db.tables.transactions[0].split_group },
+    ])
+    await expect(page.getByText('2 movimientos')).toBeVisible()
+    await expect(page.getByText('(dividido)')).toHaveCount(2)
+
+    // Editar desde la segunda parte: se abre el movimiento completo.
+    await page.getByRole('button', { name: /Transporte/ }).click()
+    const edit = page.getByRole('dialog', { name: 'Editar movimiento' })
+    await expect(edit.getByLabel('Monto total')).toHaveValue('$50.000')
+    await expect(edit.getByLabel('Monto de la parte 1')).toHaveValue('$30.000')
+    await edit.getByRole('button', { name: 'Quitar la división (una sola categoría)' }).click()
+    await edit.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect(edit).toBeHidden()
+    expect(db.tables.transactions).toMatchObject([{ amount: 50000, category_id: comida, split_group: null }])
+    await expect(page.getByText('1 movimiento')).toBeVisible()
+  })
+
+  test('eliminar un movimiento dividido elimina todas sus partes', async ({ page }) => {
+    const [comida, transporte] = db.categories.map((c) => c.id)
+    const part = { type: 'expense', date: today(), account_id: 'rut', note: 'Súper', split_group: 'g1' }
+    db.tables.transactions.push(
+      { id: 'p1', user_id: 'u', created_at: '1', to_account_id: null, tags: [], ...part, amount: 7000, category_id: comida },
+      { id: 'p2', user_id: 'u', created_at: '2', to_account_id: null, tags: [], ...part, amount: 3000, category_id: transporte },
+    )
+    await page.goto('/#/movimientos')
+    await page.getByRole('button', { name: /Comida/ }).click()
+    await page.getByRole('button', { name: 'Eliminar movimiento' }).click()
+    await expect(page.getByText('dividido en 2 categorías')).toBeVisible()
+    await page.getByRole('button', { name: 'Eliminar', exact: true }).click()
+    await expect(page.getByText('0 movimientos')).toBeVisible()
+    expect(db.tables.transactions).toHaveLength(0)
+  })
+})
+
+test('sin la migración 0008 no se ofrece dividir', async ({ page }) => {
+  const db = new FakeSupabase({ accounts: [account('Cuenta RUT', 100000)] })
+  db.missingColumns.add('split_group')
+  await db.install(page, { signedIn: true })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
+  await expect(dialog.getByRole('button', { name: 'Comida' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Dividir en varias categorías' })).toHaveCount(0)
+})

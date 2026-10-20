@@ -7,21 +7,26 @@
 // deudas e inversiones también usan este formulario, con esa parte fija.
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, Trash2, Wallet } from 'lucide-react'
+import { ChevronDown, Split, Trash2, Wallet } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { TRANSFER_LABEL, isTrackedType, transferKind, type TransferKind } from '@/lib/accounts'
 import { ACCOUNT_TYPES } from '@/lib/icons'
-import { createTransaction, deleteTransaction, parseTags, updateTransaction } from '@/data/transactions'
+import {
+  createTransaction, deleteSplitGroup, deleteTransaction, listSplitParts, parseTags, saveSplit, splitAvailable, updateTransaction,
+} from '@/data/transactions'
 import { budgetUsage } from '@/data/budgets'
 import { budgetStatus } from '@/lib/budget'
 import { addDays } from '@/lib/dates'
 import { todayISO } from '@/lib/format'
+import { splitStatus, type DraftPart } from '@/lib/split'
+import { useQuery } from '@/hooks/useQuery'
 import { AmountInput } from '@/components/AmountInput'
 import { CategoryPicker } from '@/components/CategoryPicker'
 import { AccountIcon } from '@/components/icons'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { Alert, Button, EmptyState, Field, Segmented, Select, Loading } from '@/components/ui'
 import type { AccountWithBalance, Transaction, TxInput, TxType } from '@/types'
+import { SplitEditor } from './SplitEditor'
 
 const LAST_ACCOUNT_KEY = 'finanzas.lastAccount'
 
@@ -45,7 +50,11 @@ type Props = { tx?: Transaction; preset?: Partial<TxInput>; onDone: () => void }
  *  por defecto dependen de ellas). */
 export function TransactionForm({ tx, preset, onDone }: Props) {
   const { accounts, loading } = useRefData()
-  if (loading) return <Loading label="Cargando…" />
+  // Movimiento dividido: se cargan todas sus partes para editarlas juntas.
+  const group = tx?.split_group ?? null
+  const parts = useQuery(() => (group ? listSplitParts(group) : Promise.resolve(null)), [group])
+  const canSplit = useQuery(splitAvailable, [])
+  if (loading || (group && !parts.data && !parts.error)) return <Loading label="Cargando…" />
   if (!accounts.some((a) => !a.archived) && !tx) {
     return (
       <EmptyState icon={Wallet} title="Primero crea una cuenta"
@@ -54,10 +63,18 @@ export function TransactionForm({ tx, preset, onDone }: Props) {
       </EmptyState>
     )
   }
-  return <TransactionFormInner tx={tx} preset={preset} onDone={onDone} />
+  return (
+    <TransactionFormInner tx={tx} preset={preset} onDone={onDone}
+      splitParts={parts.data ?? null} canSplit={!!canSplit.data} />
+  )
 }
 
-function TransactionFormInner({ tx, preset, onDone }: Props) {
+function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Props & {
+  /** Partes del movimiento dividido que se edita (null si no está dividido). */
+  splitParts: Transaction[] | null
+  /** La migración 0008 está aplicada. */
+  canSplit: boolean
+}) {
   const { accounts, accountById, categories } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
@@ -86,8 +103,12 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
   const defaultAccount = lastUsed(init.to_account_id)
 
   const [type, setType] = useState<TxType>(init.type ?? 'expense')
-  const [amount, setAmount] = useState<number | null>(init.amount ?? null)
-  const [categoryId, setCategoryId] = useState<string | null>(init.category_id ?? null)
+  const isSplit = !!splitParts && splitParts.length > 1
+  const [amount, setAmount] = useState<number | null>(
+    isSplit ? splitParts.reduce((s, p) => s + p.amount, 0) : init.amount ?? null)
+  const [categoryId, setCategoryId] = useState<string | null>(isSplit ? splitParts[0].category_id : init.category_id ?? null)
+  const [parts, setParts] = useState<DraftPart[] | null>(
+    isSplit ? splitParts.map((p) => ({ categoryId: p.category_id, amount: p.amount })) : null)
   // El origen se elige de nuevo si quedó en una deuda o inversión que no es la parte fija.
   const fromNeedsChoice = !!misplaced || (!!lockedTo && !!initFrom && isTrackedType(initFrom.type))
   const [accountId, setAccountId] = useState(fromNeedsChoice ? '' : init.account_id ?? defaultAccount)
@@ -112,7 +133,9 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
 
   const errors = {
     amount: !amount ? 'Ingresa un monto mayor a $0.' : '',
-    category: type !== 'transfer' && !categoryId ? 'Elige una categoría.' : '',
+    category: type !== 'transfer' && !parts && !categoryId ? 'Elige una categoría.' : '',
+    split: parts ? splitStatus(amount, parts).error
+      : tx?.split_group && type === 'transfer' ? 'Un movimiento dividido no puede ser transferencia: elimínalo y regístralo de nuevo.' : '',
     account: !accountId ? 'Elige una cuenta.' : '',
     toAccount: type === 'transfer' && (!toAccountId || toAccountId === accountId)
       ? (lockedFrom ? 'Elige la cuenta donde llega el dinero.' : 'Elige una cuenta de destino distinta a la de origen.') : '',
@@ -126,6 +149,17 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
     // La categoría de gasto no sirve para un ingreso (y viceversa).
     const cat = categories.find((c) => c.id === categoryId)
     if (!cat || cat.kind !== t) setCategoryId(null)
+    if (parts) setParts(t === 'transfer' ? null : parts.map((p) => ({ ...p, categoryId: null })))
+  }
+
+  /** Divide (o deja de dividir) entre varias categorías. */
+  function toggleSplit() {
+    if (parts) {
+      setCategoryId(parts[0]?.categoryId ?? null)
+      setParts(null)
+    } else {
+      setParts([{ categoryId, amount: null }, { categoryId: null, amount: null }])
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -145,13 +179,20 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
       tags: parseTags(tagsText),
     }
     try {
-      if (tx) await updateTransaction(tx.id, input)
+      if ((parts || tx?.split_group) && type !== 'transfer') {
+        // Dividido (o deja de estarlo): todas las partes se guardan juntas.
+        await saveSplit({
+          anchorId: tx?.id ?? null, type, date, accountId, note: input.note, tags: input.tags,
+          parts: parts ? parts.map((p) => ({ categoryId: p.categoryId!, amount: p.amount! })) : [{ categoryId: categoryId!, amount: amount! }],
+        })
+      } else if (tx) await updateTransaction(tx.id, input)
       else await createTransaction(input)
       try { localStorage.setItem(LAST_ACCOUNT_KEY, lockedFrom ? toAccountId : accountId) } catch { /* ignorar */ }
       toast(tx ? 'Movimiento actualizado' : flowKind ? `${TRANSFER_LABEL[flowKind]} guardado` : 'Movimiento guardado')
       onDone()
-      if (input.type === 'expense' && input.category_id) {
-        void warnIfOverBudget(input.category_id, input.date.slice(0, 7))
+      if (input.type === 'expense') {
+        const cats = parts ? parts.map((p) => p.categoryId!) : input.category_id ? [input.category_id] : []
+        cats.forEach((c) => void warnIfOverBudget(c, input.date.slice(0, 7)))
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar.')
@@ -175,13 +216,16 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
     if (!tx) return
     const ok = await confirm({
       title: 'Eliminar movimiento',
-      message: '¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.',
+      message: isSplit
+        ? `Este movimiento está dividido en ${splitParts!.length} categorías: se eliminarán todas las partes. Esta acción no se puede deshacer.`
+        : '¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar',
       danger: true,
     })
     if (!ok) return
     try {
-      await deleteTransaction(tx.id)
+      if (tx.split_group) await deleteSplitGroup(tx.split_group)
+      else await deleteTransaction(tx.id)
       toast('Movimiento eliminado')
       onDone()
     } catch (err) {
@@ -231,10 +275,20 @@ function TransactionFormInner({ tx, preset, onDone }: Props) {
         />
       )}
 
-      <AmountInput label="Monto" value={amount} onChange={setAmount} autoFocus={!tx} big error={show('amount')} />
+      <AmountInput label={parts ? 'Monto total' : 'Monto'} value={amount} onChange={setAmount} autoFocus={!tx} big error={show('amount')} />
 
-      {type !== 'transfer' && (
+      {type !== 'transfer' && (parts ? (
+        <SplitEditor total={amount} parts={parts} onChange={setParts} categories={kindCats} showError={submitted} />
+      ) : (
         <CategoryPicker categories={kindCats} value={categoryId} onChange={setCategoryId} error={show('category')} />
+      ))}
+      {show('split') && !parts && <Alert>{show('split')}</Alert>}
+      {canSplit && type !== 'transfer' && !locked && !tx?.installment_plan_id && (
+        <div className="-mt-2">
+          <Button type="button" variant="ghost" size="sm" icon={Split} onClick={toggleSplit}>
+            {parts ? 'Quitar la división (una sola categoría)' : 'Dividir en varias categorías'}
+          </Button>
+        </div>
       )}
 
       {locked ? (
