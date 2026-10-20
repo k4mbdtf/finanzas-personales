@@ -11,7 +11,7 @@ import type { MonthTotal } from '@/data/dashboard'
 
 type Polarity = 'up-good' | 'up-bad'
 
-function Delta({ current, previous, polarity, prevLabel, absolute }: {
+export function Delta({ current, previous, polarity, prevLabel, absolute }: {
   current: number; previous: number; polarity: Polarity; prevLabel: string; absolute?: boolean
 }) {
   if (previous === 0 && !absolute) {
@@ -34,7 +34,7 @@ function Delta({ current, previous, polarity, prevLabel, absolute }: {
   )
 }
 
-function Tile({ label, value, valueClass = '', children }: {
+export function Tile({ label, value, valueClass = '', children }: {
   label: string; value: number; valueClass?: string; children?: ReactNode
 }) {
   const shown = useAnimatedNumber(value)

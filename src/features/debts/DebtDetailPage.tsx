@@ -133,7 +133,7 @@ function Detail({ debt: a }: { debt: AccountWithBalance }) {
       </Card>
 
       <section aria-labelledby="movs">
-        <SectionHeader title={isLoan ? 'Pagos y movimientos' : 'Préstamos y cobros'} />
+        <SectionHeader id="movs" title={isLoan ? 'Pagos y movimientos' : 'Préstamos y cobros'} />
         {moves.error && <Alert>{moves.error}</Alert>}
         {moves.loading && !moves.data ? <Loading rows={3} />
           : moves.data && moves.data.rows.length > 0

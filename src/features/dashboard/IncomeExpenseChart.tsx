@@ -57,7 +57,7 @@ export function IncomeExpenseChart({ data }: { data: MonthTotal[] }) {
           </table>
         </div>
       ) : (
-        <div className="h-64" role="img" aria-label="Gráfico de ingresos y gastos de los últimos 12 meses. Usa 'Ver como tabla' para leer los valores.">
+        <div className="h-64" role="img" aria-label="Gráfico de ingresos y gastos de 12 meses. Usa 'Ver como tabla' para leer los valores.">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} barGap={2} barCategoryGap="22%" margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke={theme.grid} />

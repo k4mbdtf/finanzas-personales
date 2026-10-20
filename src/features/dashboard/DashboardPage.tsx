@@ -1,5 +1,5 @@
 // Inicio / Dashboard: KPIs, alertas de presupuesto, dona de gastos,
-// ingresos vs gastos de 12 meses y últimos movimientos del mes seleccionado.
+// próximos pagos, ingresos vs gastos de 12 meses y últimos movimientos del mes seleccionado.
 import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Plus, Rocket, TriangleAlert } from 'lucide-react'
@@ -16,6 +16,7 @@ import { BudgetProgress } from '@/features/budgets/BudgetProgress'
 import { TransactionList } from '@/features/transactions/TransactionList'
 import { useTransactionDrawer } from '@/features/transactions/TransactionDrawer'
 import { Kpis } from './Kpis'
+import { UpcomingPayments } from './UpcomingPayments'
 
 // Los gráficos traen Recharts (~107 kB gzip): se descargan en paralelo a los datos
 // (la descarga parte al cargar este módulo) sin bloquear los KPIs ni la lista.
@@ -70,7 +71,7 @@ export default function DashboardPage() {
 
       {alerts.length > 0 && (
         <section aria-labelledby="alertas">
-          <SectionHeader title="Presupuestos en alerta" icon={TriangleAlert} iconClass="text-warn"
+          <SectionHeader id="alertas" title="Presupuestos en alerta" icon={TriangleAlert} iconClass="text-warn"
             action={<Link to="/presupuestos" className="link">Ver todos</Link>} />
           <ul className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2">
             {alerts.slice(0, 4).map(({ b, c, spent }) => (
@@ -79,6 +80,8 @@ export default function DashboardPage() {
           </ul>
         </section>
       )}
+
+      <UpcomingPayments />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

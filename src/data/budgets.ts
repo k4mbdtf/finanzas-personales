@@ -48,6 +48,11 @@ export async function copyBudgets(fromYm: string, toYm: string): Promise<number>
 /** Gasto del mes por categoría (sin transferencias). Clave '' = sin categoría. */
 export async function spendingByCategory(ym: string): Promise<Map<string, number>> {
   const { from, to } = monthRange(ym)
+  return spendingBetween(from, to)
+}
+
+/** Gasto por categoría entre dos fechas (incluidas). Clave '' = sin categoría. */
+export async function spendingBetween(from: string, to: string): Promise<Map<string, number>> {
   const rows = unwrap<{ category_id: string | null; total: number }[]>(
     await supabase.rpc('spending_by_category', { p_from: from, p_to: to }),
   )
