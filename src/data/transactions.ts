@@ -69,6 +69,48 @@ export async function deleteTransaction(id: string): Promise<void> {
   emitChange('transactions')
 }
 
+/** ¿Está la migración 0008 (dividir movimientos)? Se consulta una vez por sesión. */
+let splitCheck: Promise<boolean> | null = null
+export function splitAvailable(): Promise<boolean> {
+  splitCheck ??= Promise.resolve(supabase.from('transactions').select('split_group').limit(1)).then((res) => {
+    if (!res.error) return true
+    if (res.error.code !== '42703') splitCheck = null // otro error (p. ej. sin conexión): se reintenta
+    return false
+  })
+  return splitCheck
+}
+
+/** Todas las partes de un movimiento dividido, en el orden en que se crearon. */
+export async function listSplitParts(group: string): Promise<Transaction[]> {
+  return unwrap<Transaction[]>(
+    await supabase.from('transactions').select('*').eq('split_group', group).order('created_at').order('id'),
+  )
+}
+
+export type SplitPart = { categoryId: string; amount: number }
+
+/**
+ * Guarda un movimiento dividido (atómico, en la BD). `anchorId`: el movimiento que se
+ * divide o una parte del grupo que se edita; con una sola parte deja de estar dividido.
+ */
+export async function saveSplit(input: {
+  anchorId: string | null; type: 'income' | 'expense'; date: string; accountId: string
+  note: string | null; tags: string[]; parts: SplitPart[]
+}): Promise<void> {
+  unwrap(await supabase.rpc('save_split', {
+    p_anchor: input.anchorId, p_type: input.type, p_date: input.date, p_account_id: input.accountId,
+    p_note: input.note, p_tags: input.tags,
+    p_parts: input.parts.map((p) => ({ category_id: p.categoryId, amount: p.amount })),
+  }))
+  emitChange('transactions')
+}
+
+/** Elimina todas las partes de un movimiento dividido. */
+export async function deleteSplitGroup(group: string): Promise<void> {
+  unwrap(await supabase.from('transactions').delete().eq('split_group', group))
+  emitChange('transactions')
+}
+
 /** "Comida, Viaje ,comida" -> ["comida", "viaje"] */
 export function parseTags(text: string): string[] {
   const tags = text

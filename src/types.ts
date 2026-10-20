@@ -87,6 +87,8 @@ export type Transaction = {
   installment_plan_id: string | null
   installment_no: number | null
   import_batch_id: string | null
+  /** Partes de un movimiento dividido en varias categorías (migración 0008; undefined sin ella). */
+  split_group?: string | null
   created_at: string
 }
 

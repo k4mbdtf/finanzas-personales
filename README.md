@@ -35,6 +35,7 @@ supabase/migrations/
   0005_etapa2.sql               Deudas, metas, recurrentes, cuotas, importaciones, patrimonio
   0006_deudas_inversiones.sql   Deudas fuera de Cuentas, banco de cada cuenta, inversiones
   0007_reglas.sql               Reglas de categorización (texto → categoría)
+  0008_dividir.sql              Dividir un movimiento en varias categorías (split_group + save_split)
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 e2e/                     Pruebas de punta a punta (Playwright) con Supabase simulado (fake-supabase.ts)
 supabase/email-templates/ Correos de confirmación y recuperación en español
@@ -55,7 +56,8 @@ src/
                          theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
                          csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
                          cuenta), institutions (bancos), investments, upcoming (próximos pagos),
-                         yearSummary (resumen anual), rules (reglas de categorización)
+                         yearSummary (resumen anual), rules (reglas de categorización),
+                         split (dividir movimientos)
                          (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
@@ -166,6 +168,16 @@ inversiones (que no son cuentas).
 mes (o rango de fechas), tipo, cuenta, categoría, etiqueta y texto en la nota. Tocar un movimiento
 abre la edición, con opción de eliminarlo (con confirmación).
 
+**Dividir un movimiento** (requiere la migración 0008): en el registro, "Dividir en varias categorías"
+reparte el monto total entre 2 a 20 categorías (p. ej. una compra del súper con algo de farmacia),
+mostrando cuánto falta o sobra. Se guardan como movimientos normales —uno por categoría, con la misma
+fecha, cuenta, nota y etiquetas— unidos por `split_group`, así cada parte cuenta en su categoría en
+presupuestos y reportes sin cambiar nada más. `save_split()` guarda el grupo de forma atómica; si se
+divide un movimiento existente, ese registro pasa a ser la primera parte y conserva su id y su huella
+de importación (no se duplica al reimportar). Tocar cualquier parte abre el movimiento completo;
+eliminarlo elimina todas las partes. Las cuotas y las transferencias no se dividen. Sin la migración,
+el botón no aparece.
+
 **Registro rápido** (botón `+ Nueva transacción`): el monto queda enfocado con teclado numérico,
 la categoría se elige con un toque, la cuenta recuerda la última usada y la fecha parte en "Hoy".
 Nota y etiquetas van en "Más detalles". Si el gasto deja su categoría sobre el 80% o el 100% del
@@ -272,7 +284,7 @@ Estilo suizo minimalista con detalles inspirados en Apple. Todo vive en `src/ind
   ni en los secrets de GitHub.
 - Las funciones SQL invocables: `delete_my_account`, `spending_by_category`, `monthly_totals`,
   `materialize_recurring`, `create_installment_plan`, `import_transactions`, `net_worth_by_month`,
-  `create_tracked_account`
+  `create_tracked_account`, `save_split`
   (solo `authenticated`, todas `security invoker` = respetan RLS) y `keepalive` (también `anon`, no lee datos).
 - El service worker no cachea ninguna respuesta de Supabase.
 
