@@ -23,6 +23,9 @@ const NetWorthPage = lazy(() => import('@/features/networth/NetWorthPage'))
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'))
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'))
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'))
+const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'))
+const InvestmentsPage = lazy(() => import('@/features/investments/InvestmentsPage'))
+const InvestmentDetailPage = lazy(() => import('@/features/investments/InvestmentDetailPage'))
 const GoalsPage = lazy(() => import('@/features/goals/GoalsPage'))
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'))
 const ImportPage = lazy(() => import('@/features/import/ImportPage'))
@@ -81,6 +84,9 @@ export default function App() {
               <Route path="/presupuestos" element={page(<BudgetsPage />)} />
               <Route path="/categorias" element={page(<CategoriesPage />)} />
               <Route path="/deudas" element={page(<DebtsPage />)} />
+              <Route path="/deudas/:id" element={page(<DebtDetailPage />)} />
+              <Route path="/inversiones" element={page(<InvestmentsPage />)} />
+              <Route path="/inversiones/:id" element={page(<InvestmentDetailPage />)} />
               <Route path="/metas" element={page(<GoalsPage />)} />
               <Route path="/recurrentes" element={page(<RecurringPage />)} />
               <Route path="/importar" element={page(<ImportPage />)} />

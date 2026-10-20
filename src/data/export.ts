@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import { unwrap } from '@/lib/errors'
 import { todayISO } from '@/lib/format'
+import { TRANSFER_LABEL, transferKind } from '@/lib/accounts'
 import type { Account, Category, Transaction } from '@/types'
 
 const PAGE = 1000 // límite por respuesta de la API de Supabase
@@ -22,7 +23,7 @@ type Row = Record<string, unknown>
 
 async function fetchEverything() {
   const [profile, accounts, categories, transactions, budgets,
-    goals, goal_contributions, recurring_rules, installment_plans, import_batches] = await Promise.all([
+    goals, goal_contributions, recurring_rules, installment_plans, import_batches, investment_valuations] = await Promise.all([
     fetchAll<Row>('profiles'),
     fetchAll<Account>('accounts'),
     fetchAll<Category>('categories'),
@@ -33,10 +34,11 @@ async function fetchEverything() {
     fetchAll<Row>('recurring_rules'),
     fetchAll<Row>('installment_plans'),
     fetchAll<Row>('import_batches'),
+    fetchAll<Row>('investment_valuations', 'date'),
   ])
   return {
     profile: profile[0] ?? null, accounts, categories, transactions, budgets,
-    goals, goal_contributions, recurring_rules, installment_plans, import_batches,
+    goals, goal_contributions, recurring_rules, installment_plans, import_batches, investment_valuations,
   }
 }
 
@@ -69,6 +71,7 @@ const TYPE_LABEL = { income: 'Ingreso', expense: 'Gasto', transfer: 'Transferenc
 export async function exportTransactionsCSV(): Promise<number> {
   const { accounts, categories, transactions } = await fetchEverything()
   const acc = new Map(accounts.map((a) => [a.id, a.name]))
+  const accType = new Map(accounts.map((a) => [a.id, a.type]))
   const cat = new Map(categories.map((c) => [c.id, c.name]))
   const header = ['Fecha', 'Tipo', 'Monto (CLP)', 'Categoría', 'Cuenta', 'Cuenta destino', 'Nota', 'Etiquetas', 'Origen']
   const origin = (t: Transaction) =>
@@ -77,7 +80,10 @@ export async function exportTransactionsCSV(): Promise<number> {
       : t.import_batch_id ? 'Importado' : 'Manual'
   const lines = transactions.map((t) => [
     t.date,
-    TYPE_LABEL[t.type],
+    // Las transferencias dicen qué son: pago de deuda, aporte a inversión...
+    t.type === 'transfer'
+      ? TRANSFER_LABEL[transferKind(accType.get(t.account_id), t.to_account_id ? accType.get(t.to_account_id) : undefined)]
+      : TYPE_LABEL[t.type],
     // Con signo: gastos negativos; transferencias positivas (no son ingreso ni gasto).
     t.type === 'expense' ? -t.amount : t.amount,
     t.category_id ? cat.get(t.category_id) ?? '' : '',

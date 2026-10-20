@@ -15,7 +15,7 @@ const PLANS = {
   'ana.test@example.com': {
     accounts: [
       { name: 'Efectivo Ana', type: 'cash', initial_balance: 50000 },
-      { name: 'Cuenta RUT Ana', type: 'bank', initial_balance: 1200000 },
+      { name: 'Cuenta RUT Ana', type: 'bank', initial_balance: 1200000, institution: 'bancoestado' },
     ],
     tx: [
       ['income', 1500000, 'Sueldo', 1, 'Sueldo octubre'],
@@ -115,6 +115,11 @@ async function seedStage2(client, email, accs, catId) {
     }), 'cuotas')
     const savings = accs.find((a) => a.type === 'savings')
     ok(await client.from('goals').insert({ name: 'Auto Bruno', target_amount: 8000000, account_id: savings.id }), 'meta')
+    // Inversión (0006): aporte desde el ahorro y su valor actual.
+    ok(await client.rpc('create_tracked_account', {
+      p_account: { type: 'investment', name: 'Fondo Bruno', investment_kind: 'fund', counterparty: 'Fintual' },
+      p_cash_account: savings.id, p_cash_amount: 200000, p_date: iso(30), p_value: 200000,
+    }), 'inversión')
   }
 
   if (email.startsWith('carla')) {

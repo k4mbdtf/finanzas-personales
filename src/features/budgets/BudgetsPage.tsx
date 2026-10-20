@@ -109,7 +109,7 @@ export default function BudgetsPage() {
             <p className={`mt-2 text-xs font-medium ${LEVEL_UI[overall.level].text}`}>{overall.pct}% del total · {LEVEL_UI[overall.level].label}</p>
           </Card>
 
-          <ul className="stagger grid gap-3 sm:grid-cols-2">
+          <ul className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2">
             {rows.map((r) => (
               <li key={r.budget.id}>
                 <BudgetProgress category={r.category} spent={r.spent} amount={r.budget.amount} onClick={() => setEditing(r.category)} />

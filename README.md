@@ -15,6 +15,7 @@ Español (Chile), montos en CLP sin decimales (`$12.500`), zona horaria `America
 | 4 | Dashboard y gráficos | ✅ |
 | 5 | PWA, exportación, despliegue y keep-alive | ✅ |
 | Etapa 2 | Deudas y cuotas, metas, recurrentes, importar cartolas, patrimonio | ✅ |
+| Etapa 3 | Deudas separadas de las cuentas, bancos chilenos con logo y color, inversiones | ✅ |
 | Diseño | Estilo suizo minimalista: beige y carbón, íconos Lucide, animaciones suaves | ✅ |
 
 **Inicio rápido:** [1. Supabase](#1-crear-el-proyecto-en-supabase) → [2. Auth](#2-configurar-auth) →
@@ -32,6 +33,7 @@ supabase/migrations/
   0003_dashboard.sql            RPC monthly_totals (ingresos/gastos por mes)
   0004_keepalive.sql            RPC keepalive() para el workflow anti-pausa
   0005_etapa2.sql               Deudas, metas, recurrentes, cuotas, importaciones, patrimonio
+  0006_deudas_inversiones.sql   Deudas fuera de Cuentas, banco de cada cuenta, inversiones
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 supabase/email-templates/ Correos de confirmación y recuperación en español
 .github/workflows/
@@ -48,11 +50,13 @@ src/
   lib/                   supabase (cliente), format (CLP), dates (meses), errors,
                          events (recarga automática), icons (nombres de íconos y colores),
                          theme (claro/oscuro), motion (animaciones), pwa (service worker, instalar), chartTheme,
-                         csv (cartolas), recurring (fechas), debt, goals  (+ *.test.ts)
+                         csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
+                         cuenta), institutions (bancos), investments  (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
-                         budgets, dashboard, export, goals, recurring, installments, imports, netWorth)
-  context/               RefData (cuentas y categorías globales), Month (mes seleccionado)
+                         budgets, dashboard, export, goals, recurring, installments, imports, netWorth,
+                         investments)
+  context/               RefData (cuentas, deudas, inversiones y categorías), Month (mes seleccionado)
   auth/AuthProvider.tsx  Sesión global + detección de recuperación de contraseña
   components/            UI base, icons.tsx (íconos Lucide), Modal (<dialog>), Feedback (confirmar/toast),
                          AmountInput, MonthSelector, AppShell (sidebar + barra inferior)
@@ -61,7 +65,8 @@ src/
   features/categories/   Categorías: crear, editar color/ícono, archivar, eliminar
   features/budgets/      Presupuestos mensuales, barra de progreso, alertas
   features/dashboard/    KPIs, dona de gastos, barras 12 meses (Recharts, carga diferida)
-  features/debts/        Deudas y cuotas: préstamos, tarjetas, compras en cuotas, me deben
+  features/debts/        Deudas y cuotas: lo que debes, tarjetas, compras en cuotas, me deben (+ detalle)
+  features/investments/  Inversiones: aportes, rescates, valor actual, ganancia y gráfico (+ detalle)
   features/goals/        Metas de ahorro y abonos
   features/recurring/    Movimientos recurrentes
   features/import/       Importar cartolas CSV (rows.ts + pruebas)
@@ -83,8 +88,11 @@ Así no se necesita una librería de caché y agregar una vista nueva es solo us
 ```
 auth.users (Supabase)
   └─ profiles      1:1  configuración (moneda CLP, zona horaria)
-  └─ accounts      cash | bank | savings | credit_card | loan | receivable
-  │                (+ cupo/cierre/pago en tarjetas; monto, cuota, plazo, tasa y acreedor en préstamos)
+  └─ accounts      de dinero: cash | bank | savings | credit_card
+  │                de seguimiento: loan (deuda) | receivable (me deben) | investment
+  │                (+ cupo/cierre/pago en tarjetas; monto, cuota, plazo, tasa y acreedor en deudas;
+  │                 institution = banco del logo; investment_kind en inversiones)
+  │     └─ investment_valuations    valor de una inversión en una fecha
   └─ categories    income | expense, color, ícono (15 por defecto al registrarse)
   └─ transactions  income | expense | transfer
   │     account_id    → accounts     (FK compuesta con user_id)
@@ -97,7 +105,8 @@ auth.users (Supabase)
   └─ recurring_rules                 plantilla + frecuencia; generan transactions
   └─ installment_plans               compra en cuotas; sus cuotas son transactions
   └─ import_batches                  cada cartola importada (para deshacer)
-views: account_balances (saldo por cuenta), goal_progress (avance de metas) — security_invoker
+views: account_balances (saldo, entradas y salidas por cuenta), goal_progress (avance de metas),
+       investment_status (aportado, rescatado y valor actual) — todas security_invoker
 ```
 
 Decisiones clave:
@@ -122,16 +131,29 @@ Decisiones clave:
 | **Importar cartolas** | Sirve para cualquier banco: el CSV se lee en el navegador (UTF-8 o Windows-1252, `;` `,` o tabulador, montos `$1.234.567`, `(500)`, `500-`, fechas `dd/mm/aaaa`, `01-oct-2026`…), se adivinan las columnas y el usuario las corrige. Cada fila tiene una huella SHA-256 (cuenta + fecha + monto + descripción + n° de repetición); `unique (user_id, import_hash)` omite lo ya importado. Lo que coincide con movimientos ingresados a mano se marca como "posible duplicado". La importación es atómica y se puede **deshacer** por lote. Se sugieren categorías según descripciones anteriores. |
 | **Patrimonio** | `net_worth_by_month()` reconstruye el saldo de cada cuenta a fin de mes (saldo inicial + movimientos; las cuotas desde la fecha de compra). Activos = efectivo, banco, ahorro y me deben; deudas = tarjetas y préstamos. |
 
+### Decisiones de la Etapa 3
+
+| Funcionalidad | Cómo funciona |
+|---|---|
+| **Deudas fuera de Cuentas** | Una deuda, un "me deben" o una inversión no es una cuenta para gastar: no aparece en *Cuentas* ni en los formularios de gastos, ingresos, importación o filtros (`RefData.accounts` trae solo efectivo, banco, ahorro y tarjetas). Por dentro siguen siendo filas de `accounts` (`loan`, `receivable`, `investment`): así los saldos, el patrimonio y las transferencias existentes cuadran sin migrar datos. Se mueven solo con **Pagar**, **Cobrar**, **Prestar más**, **Aportar** y **Rescatar**, que son transferencias desde o hacia una cuenta propia (no cuentan como gasto ni ingreso). La BD lo garantiza: un ingreso o gasto en una deuda o inversión, o una transferencia entre dos de ellas, se rechaza (trigger `check_tracked_accounts`). Los movimientos que genera una regla recurrente antigua no se revisan ahí (la regla se valida al editarla), para que una regla mal hecha no detenga las demás. |
+| **Avance de una deuda** | En cuotas: cuotas restantes = deuda ÷ cuota, hacia arriba ("24 cuotas, ya pagué 4" parte en 4 de 24). Sin cuotas: lo pagado ÷ (lo pagado + lo que falta). El monto original es solo informativo (no suele incluir intereses). Al editar, "lo que debes hoy" corrige el punto de partida sin tocar los pagos. |
+| **Crear con el dinero** | `create_tracked_account()` crea la deuda o inversión y, si corresponde, el movimiento inicial en una sola operación: el préstamo que llegó a tu cuenta, lo que le prestaste a alguien o lo que aportaste a una inversión. |
+| **Bancos** | `src/lib/institutions.ts` trae los bancos y billeteras de Chile (BancoEstado, Banco de Chile, Santander, Bci, Scotiabank, Itaú, Falabella, Ripley, BICE, Security, Coopeuch, Tenpo, MACH, Mercado Pago) con su color, un logo propio (monograma, no el logo oficial) y sus productos (CuentaRUT, Cuenta Corriente, Débito, Tarjeta CMR…). La BD guarda solo el id en `accounts.institution`; el nombre y el color se pueden cambiar. |
+| **Inversiones** | Lo aportado = saldo inicial + aportes; lo rescatado = rescates. El valor se registra a mano (`investment_valuations`): vale la última valorización + aportes − rescates posteriores (por fecha, y el mismo día por hora de registro). Ganancia = valor + rescatado − aportado; el % es sobre lo aportado. El patrimonio y las metas vinculadas usan ese valor. |
+
 Para agregar más funcionalidades se sigue el mismo patrón: **una migración nueva** + un archivo en
 `src/data/` + una carpeta en `src/features/` + una línea en `components/nav.ts` y en `App.tsx`, con
 `user_id default auth.uid()`, RLS de 4 políticas, FKs compuestas y pruebas en `supabase/tests/`.
 
 ## Funcionalidades
 
-**Cuentas** (`/#/cuentas`): efectivo, banco, ahorro y tarjeta de crédito con saldo actual calculado.
-Las tarjetas muestran deuda, cupo disponible (barra ámbar sobre el 80%), día de cierre y de pago.
-Una cuenta con movimientos no se puede eliminar, pero sí archivar. El pago de la tarjeta se
-registra como **transferencia** banco → tarjeta.
+**Cuentas** (`/#/cuentas`): solo donde está tu dinero: efectivo, banco, ahorro y tarjeta de crédito,
+con saldo actual calculado. Al crear una se elige el banco (con su logo y color) y el producto
+(CuentaRUT, Cuenta Corriente, Débito, Tarjeta de Crédito…); el nombre y el color se completan solos
+y se pueden cambiar. Las tarjetas muestran deuda, cupo disponible (barra ámbar sobre el 80%), día
+de cierre y de pago. Una cuenta con movimientos no se puede eliminar, pero sí archivar. El pago de
+la tarjeta se registra como **transferencia** banco → tarjeta. Al final hay accesos a tus deudas e
+inversiones (que no son cuentas).
 
 **Movimientos** (`/#/movimientos`): ingreso, gasto y transferencia, agrupados por día. Filtros por
 mes (o rango de fechas), tipo, cuenta, categoría, etiqueta y texto en la nota. Tocar un movimiento
@@ -153,7 +175,7 @@ verde, **ámbar al 80%** y **roja al 100%**, siempre con texto ("Cerca del lími
 presupuestos del mes anterior. Las transferencias no cuentan como gasto.
 
 **Inicio / Dashboard** (`/#/`): para el mes seleccionado muestra:
-- KPIs: saldo total, ingresos, gastos y ahorro (con % de ahorro sobre ingresos), con variación
+- KPIs: saldo en cuentas, ingresos, gastos y ahorro (con % de ahorro sobre ingresos), con variación
   vs el mes anterior (▲/▼ + texto; en gastos subir es malo).
 - Presupuestos en alerta (≥ 80%).
 - Dona de gastos por categoría: top 5 + "Otros", con el color de cada categoría y una leyenda-tabla
@@ -162,9 +184,20 @@ presupuestos del mes anterior. Las transferencias no cuentan como gasto.
   "Ver como tabla".
 - Últimos 5 movimientos.
 
-**Deudas y cuotas** (`/#/deudas`): préstamos con % pagado y cuotas restantes, tarjetas con cupo
-usado, compras en cuotas ("cuota 3 de 12, próxima el…") y lo que te deben. Botones **Registrar pago**,
-**Pagar** y **Registrar cobro** abren el registro rápido ya completado.
+**Deudas y cuotas** (`/#/deudas`): lo que debes (en cuotas: "cuota 6 de 24, te quedan 18"; o un
+monto total), tarjetas con cupo usado, compras en cuotas ("cuota 3 de 12, próxima el…") y lo que
+te deben. **Nueva deuda** tiene su propio formulario ("Yo debo" / "Me deben"), reconoce el banco
+al escribirlo y puede registrar el dinero que llegó o salió de una cuenta. **Pagar**, **Cobrar** y
+**Prestar más** abren el registro ya completado, con la deuda fija y solo tus cuentas para elegir.
+Cada deuda tiene su detalle (`/#/deudas/<id>`) con sus datos y todos sus pagos; las pagadas se
+pueden archivar.
+
+**Inversiones** (`/#/inversiones`): fondos mutuos, acciones o ETF, depósitos a plazo, cripto, APV u
+otras. Muestra el valor actual, lo aportado y la ganancia (en $ y %, con flecha y signo), por
+inversión y en total, y avisa si hace más de un mes que no actualizas el valor. **Aportar** y
+**Rescatar** mueven dinero de tus cuentas sin contar como gasto ni ingreso; **Actualizar valor**
+anota lo que muestra la app de tu banco o corredora. El detalle (`/#/inversiones/<id>`) tiene un
+gráfico de valor vs aportado (con vista de tabla), los valores registrados y los movimientos.
 
 **Metas** (`/#/metas`), **Recurrentes** (`/#/recurrentes`), **Importar cartola** (`/#/importar`) y
 **Patrimonio** (`/#/patrimonio`, línea de 12 o 24 meses con vista de tabla). En el celular están en
@@ -214,7 +247,8 @@ Estilo suizo minimalista con detalles inspirados en Apple. Todo vive en `src/ind
   y está en `scripts/.env.scripts` (ignorado por git). **Nunca** la pongas en variables `VITE_*`
   ni en los secrets de GitHub.
 - Las funciones SQL invocables: `delete_my_account`, `spending_by_category`, `monthly_totals`,
-  `materialize_recurring`, `create_installment_plan`, `import_transactions`, `net_worth_by_month`
+  `materialize_recurring`, `create_installment_plan`, `import_transactions`, `net_worth_by_month`,
+  `create_tracked_account`
   (solo `authenticated`, todas `security invoker` = respetan RLS) y `keepalive` (también `anon`, no lee datos).
 - El service worker no cachea ninguna respuesta de Supabase.
 
@@ -274,14 +308,16 @@ Hay tres niveles; los dos primeros no tocan Supabase y corren también en GitHub
 cada despliegue:
 
 ```bash
-npm run test:unit   # lógica pura: CSV de bancos, fechas recurrentes, deudas, metas (node --test)
+npm run test:unit   # lógica pura: CSV de bancos, fechas recurrentes, deudas, metas, bancos,
+                    # inversiones (node --test)
 npm run test:sql    # aplica TODAS las migraciones en un PostgreSQL desechable (Docker) y prueba
                     # reglas, RPCs, aislamiento entre usuarios, permisos de anon y borrado en cascada
 ```
 
 `test:sql` necesita Docker en ejecución. Imita lo mínimo de Supabase (`supabase/tests/00_supabase_stub.sql`),
-aplica 0001–0004, carga datos "existentes" y recién ahí aplica 0005, para verificar que la migración
-funciona sobre datos reales.
+aplica 0001–0004, carga datos "existentes" y recién ahí aplica 0005; luego carga más datos con el
+esquema de 0005 (deudas anotadas como cuentas, incluso con gastos por error) y aplica 0006, para
+verificar que cada migración funciona sobre datos reales.
 
 El tercer nivel prueba contra la API real de tu proyecto:
 

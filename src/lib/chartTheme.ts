@@ -9,7 +9,8 @@ const LIGHT = {
   surface: '#ffffff', // = --surface (tarjetas)
   income: '#008300',
   expense: '#e34948',
-  net: '#2a78d6', // patrimonio (serie única, validada vs superficie)
+  net: '#2a78d6', // patrimonio y valor de inversiones (validada vs superficie)
+  invested: '#eb6834', // lo aportado a una inversión (par validado con net: ΔE CVD 24,7)
   other: '#a39e93',
   grid: '#ece7dc', // líneas finas, un tono sobre la superficie
   axis: '#6e695f',
@@ -20,6 +21,7 @@ const DARK: typeof LIGHT = {
   income: '#0ca30c',
   expense: '#e66767',
   net: '#3987e5',
+  invested: '#d95926', // par validado con net en oscuro (ΔE CVD 26,8)
   other: '#636366',
   grid: '#2c2c2e',
   axis: '#98989d',

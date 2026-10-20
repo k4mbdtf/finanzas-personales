@@ -3,9 +3,12 @@
 //    desde ahí hasta hoy (y luego solos cada vez que abres la app).
 //  * Al editar: se muestra la "próxima fecha". Si cambias la frecuencia o esa
 //    fecha, la regla se reprograma desde ahí (no toca lo ya generado).
+//  * Una transferencia puede ir a una deuda (pago mensual de un crédito) o a una
+//    inversión (aporte mensual): aparecen agrupadas aparte en "Hacia".
 import { useMemo, useState, type FormEvent } from 'react'
 import { CalendarClock, Trash2, TriangleAlert } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { isTrackedType } from '@/lib/accounts'
 import { parseTags } from '@/data/transactions'
 import { createRule, deleteRule, materializeRecurring, updateRule } from '@/data/recurring'
 import { formatDate, todayISO } from '@/lib/format'
@@ -21,16 +24,23 @@ const FREQ_UNIT: Record<Freq, [string, string]> = {
 }
 
 export function RecurringForm({ rule, onDone }: { rule?: RecurringRule; onDone: () => void }) {
-  const { accounts, categories } = useRefData()
+  const { accounts, debts, investments, accountById, categories } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
+  // Solo cuentas de dinero (en edición, también la original aunque esté archivada).
   const usable = accounts.filter((a) => !a.archived || a.id === rule?.account_id || a.id === rule?.to_account_id)
   const firstAccount = usable.find((a) => !a.archived)?.id ?? ''
+  // Deudas por pagar e inversiones como destino de una transferencia mensual.
+  const payable = debts.filter((a) => a.type === 'loan' && (!a.archived || a.id === rule?.to_account_id))
+  const investable = investments.filter((a) => !a.archived || a.id === rule?.to_account_id)
+  // Regla antigua con una deuda o inversión como cuenta de origen.
+  const ruleFrom = rule ? accountById.get(rule.account_id) : undefined
+  const misplaced = ruleFrom && isTrackedType(ruleFrom.type) ? ruleFrom : undefined
 
   const [type, setType] = useState<TxType>(rule?.type ?? 'expense')
   const [amount, setAmount] = useState<number | null>(rule?.amount ?? null)
   const [categoryId, setCategoryId] = useState<string | null>(rule?.category_id ?? null)
-  const [accountId, setAccountId] = useState(rule?.account_id ?? firstAccount)
+  const [accountId, setAccountId] = useState(misplaced ? '' : rule?.account_id ?? firstAccount)
   const [toAccountId, setToAccountId] = useState(rule?.to_account_id ?? usable.find((a) => !a.archived && a.id !== firstAccount)?.id ?? '')
   const [note, setNote] = useState(rule?.note ?? '')
   const [tagsText, setTagsText] = useState(rule?.tags.join(', ') ?? '')
@@ -144,15 +154,35 @@ export function RecurringForm({ rule, onDone }: { rule?: RecurringRule; onDone: 
         <CategoryPicker categories={kindCats} value={categoryId} onChange={setCategoryId} error={show('category')} />
       )}
 
+      {misplaced && (
+        <Alert kind="warning">
+          Esta regla anotaba movimientos en <strong>{misplaced.name}</strong>, que es una deuda o inversión. Elige la
+          cuenta desde donde sale (o llega) el dinero. Para pagar una deuda todos los meses usa una transferencia hacia ella.
+        </Alert>
+      )}
+
       <div className={`grid gap-3 ${type === 'transfer' ? 'grid-cols-2' : ''}`}>
         <Select label={type === 'transfer' ? 'Desde' : 'Cuenta'} value={accountId} error={show('account')}
           onChange={(e) => setAccountId(e.target.value)}>
+          {!accountId && <option value="">Elegir…</option>}
           {usable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </Select>
         {type === 'transfer' && (
           <Select label="Hacia" value={toAccountId} error={show('toAccount')} onChange={(e) => setToAccountId(e.target.value)}>
             <option value="">Elegir…</option>
-            {usable.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <optgroup label="Tus cuentas">
+              {usable.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </optgroup>
+            {payable.length > 0 && (
+              <optgroup label="Pagar una deuda">
+                {payable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </optgroup>
+            )}
+            {investable.length > 0 && (
+              <optgroup label="Aportar a una inversión">
+                {investable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </optgroup>
+            )}
           </Select>
         )}
       </div>

@@ -3,7 +3,7 @@
 
 export type Topic =
   | 'accounts' | 'categories' | 'transactions' | 'budgets'
-  | 'goals' | 'recurring' | 'installments' | 'imports'
+  | 'goals' | 'recurring' | 'installments' | 'imports' | 'investments'
 
 type Listener = (topic: Topic) => void
 const listeners = new Set<Listener>()

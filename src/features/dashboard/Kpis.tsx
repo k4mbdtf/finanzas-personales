@@ -60,9 +60,9 @@ export function Kpis({ totalBalance, current, previous }: {
 
   return (
     <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Tile label="Saldo total" value={totalBalance} valueClass={totalBalance < 0 ? 'text-neg' : ''}>
+      <Tile label="Saldo en cuentas" value={totalBalance} valueClass={totalBalance < 0 ? 'text-neg' : ''}>
         <p className="text-xs text-muted">
-          Cuentas menos deudas · <Link to="/patrimonio" className="link">evolución</Link>
+          Tarjetas descontadas · <Link to="/patrimonio" className="link">patrimonio</Link>
         </p>
       </Tile>
       <Tile label="Ingresos" value={current.income} valueClass="text-pos">

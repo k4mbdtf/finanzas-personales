@@ -65,7 +65,7 @@ export default function DashboardPage() {
         <section aria-labelledby="alertas">
           <SectionHeader title="Presupuestos en alerta" icon={TriangleAlert} iconClass="text-warn"
             action={<Link to="/presupuestos" className="link">Ver todos</Link>} />
-          <ul className="stagger grid gap-3 sm:grid-cols-2">
+          <ul className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2">
             {alerts.slice(0, 4).map(({ b, c, spent }) => (
               <li key={b.id}><BudgetProgress category={c!} spent={spent} amount={b.amount} /></li>
             ))}

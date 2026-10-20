@@ -29,7 +29,12 @@ export function dbErrorMessage(error: PostgrestError | null | undefined): string
   switch (error.code) {
     case '23505': return 'Ya existe un registro con esos datos.'
     case '23503': return 'El registro está en uso o hace referencia a datos que no existen.'
-    case '23514': return 'Los datos no cumplen las reglas (revisa montos, fechas y categorías).'
+    case '23514':
+    case '22023':
+      // Los triggers y funciones propios explican el problema en español; los
+      // mensajes de CHECK de Postgres son técnicos y se reemplazan.
+      if (error.message && !/violat|constraint|null value|invalid input/i.test(error.message)) return error.message
+      return 'Los datos no cumplen las reglas (revisa montos, fechas y categorías).'
     case '42501': return 'No tienes permiso para realizar esta acción.'
     case 'PGRST301': return 'Tu sesión expiró. Vuelve a iniciar sesión.'
     default:

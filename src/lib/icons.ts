@@ -43,8 +43,9 @@ export const ACCOUNT_TYPES = {
   bank: { label: 'Cuenta bancaria' },
   savings: { label: 'Ahorro' },
   credit_card: { label: 'Tarjeta de crédito' },
-  loan: { label: 'Préstamo / deuda' },
+  loan: { label: 'Deuda' },
   receivable: { label: 'Me deben' },
+  investment: { label: 'Inversión' },
 } as const
 
 /** Cuentas cuyo saldo negativo es una deuda (se muestran como "Debes $X"). */

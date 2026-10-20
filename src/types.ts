@@ -1,8 +1,15 @@
 // Tipos de las tablas de Supabase (escritos a mano para no depender del CLI).
 // Si cambias el esquema SQL, actualiza también este archivo.
 
-/** loan = préstamo/deuda (saldo negativo); receivable = me deben (saldo positivo). */
-export type AccountType = 'cash' | 'bank' | 'savings' | 'credit_card' | 'loan' | 'receivable'
+/**
+ * Cuentas de dinero: cash, bank, savings, credit_card (aparecen en Cuentas y en los formularios).
+ * Seguimiento (no son para gastar; viven en sus propias secciones):
+ *   loan = deuda (saldo negativo), receivable = me deben (saldo positivo),
+ *   investment = inversión (saldo = lo aportado; su valor va en investment_valuations).
+ */
+export type AccountType = 'cash' | 'bank' | 'savings' | 'credit_card' | 'loan' | 'receivable' | 'investment'
+
+export type InvestmentKind = 'fund' | 'stocks' | 'deposit' | 'crypto' | 'retirement' | 'other'
 
 export type Account = {
   id: string
@@ -14,25 +21,29 @@ export type Account = {
   credit_limit: number | null
   closing_day: number | null
   payment_day: number | null
-  /** Préstamo / me deben: banco o persona. */
+  /** Deuda / me deben: banco o persona. Inversión: plataforma (Fintual, un banco...). */
   counterparty: string | null
   /** Solo préstamos: monto original, cuota mensual, n° de cuotas y tasa anual (%). */
   loan_amount: number | null
   loan_installment: number | null
   loan_installments_count: number | null
   interest_rate: number | null
+  /** Banco o plataforma (id de src/lib/institutions.ts): da el logo y el color. */
+  institution: string | null
+  investment_kind: InvestmentKind | null
   color: string
   archived: boolean
   created_at: string
 }
 
-export type AccountWithBalance = Account & { balance: number }
+/** inflow: ingresos + transferencias recibidas; outflow: gastos + transferencias enviadas. */
+export type AccountWithBalance = Account & { balance: number; inflow: number; outflow: number }
 
 export type AccountInput = Pick<
   Account,
   | 'name' | 'type' | 'initial_balance' | 'credit_limit' | 'closing_day' | 'payment_day'
   | 'counterparty' | 'loan_amount' | 'loan_installment' | 'loan_installments_count' | 'interest_rate'
-  | 'color' | 'archived'
+  | 'institution' | 'investment_kind' | 'color' | 'archived'
 >
 
 export type CategoryKind = 'income' | 'expense'
@@ -159,4 +170,30 @@ export type ImportBatch = {
   filename: string | null
   row_count: number
   created_at: string
+}
+
+// ---------------------------------------------------------------------
+// Inversiones (migración 0006)
+// ---------------------------------------------------------------------
+
+/** Valor total de una inversión en una fecha (lo que muestra su app). */
+export type InvestmentValuation = {
+  id: string
+  account_id: string
+  date: string
+  value: number
+  note: string | null
+  created_at: string
+}
+
+/** Vista investment_status. */
+export type InvestmentStatus = {
+  account_id: string
+  /** Saldo inicial + aportes. */
+  contributed: number
+  withdrawn: number
+  valued_at: string | null
+  last_value: number | null
+  /** Última valorización + aportes − rescates posteriores (o lo aportado neto si no hay). */
+  current_value: number
 }

@@ -37,7 +37,7 @@ export default function GoalsPage() {
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{g.name}</p>
               <p className="text-[0.8125rem] text-muted">
-                {linked ? `Saldo de ${linked.name}` : 'Abonos manuales'}
+                {linked ? `${linked.type === 'investment' ? 'Valor de' : 'Saldo de'} ${linked.name}` : 'Abonos manuales'}
                 {g.target_date && ` · para el ${formatDate(g.target_date)}`}
               </p>
             </div>
@@ -85,7 +85,7 @@ export default function GoalsPage() {
         </EmptyState>
       ) : (
         <>
-          <ul className="stagger grid gap-3 sm:grid-cols-2">{active.map(card)}</ul>
+          <ul className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2">{active.map(card)}</ul>
           {archived.length > 0 && (
             <section>
               <button className="pressable inline-flex items-center gap-1.5 text-sm font-medium text-soft hover:text-ink"
@@ -94,7 +94,7 @@ export default function GoalsPage() {
                 <ChevronDown size={16} strokeWidth={2} aria-hidden
                   className={`transition-transform duration-300 ease-soft ${showArchived ? 'rotate-180' : ''}`} />
               </button>
-              {showArchived && <ul className="stagger mt-3 grid gap-3 opacity-75 sm:grid-cols-2">{archived.map(card)}</ul>}
+              {showArchived && <ul className="stagger mt-3 grid grid-cols-1 gap-3 opacity-75 sm:grid-cols-2">{archived.map(card)}</ul>}
             </section>
           )}
         </>

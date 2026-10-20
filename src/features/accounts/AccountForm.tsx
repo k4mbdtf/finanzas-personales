@@ -1,89 +1,135 @@
-// Crear / editar una cuenta.
-//  * Tarjeta de crédito y préstamo: se pide la deuda actual (positiva en
-//    pantalla) y se guarda como saldo inicial negativo.
-//  * "Me deben": el monto que te deben, en positivo.
-// Los pagos de deudas son transferencias (no cuentan como gasto).
-import { useState, type FormEvent } from 'react'
+// Crear / editar una cuenta de dinero: efectivo, banco, ahorro o tarjeta.
+//  * Al crear se elige el banco (logo y color de marca) y el producto
+//    (CuentaRUT, Cuenta Corriente, Tarjeta de Crédito...): el nombre y el color
+//    se completan solos y se pueden cambiar.
+//  * Tarjeta de crédito: se pide la deuda actual (positiva en pantalla) y se
+//    guarda como saldo inicial negativo. Pagarla es una transferencia.
+// Las deudas y los "me deben" se crean en Deudas; las inversiones, en Inversiones.
+import { useState, type FormEvent, type ReactNode } from 'react'
+import { Banknote, Landmark, Trash2 } from 'lucide-react'
 import { createAccount, deleteAccount, updateAccount } from '@/data/accounts'
 import { AppError } from '@/lib/errors'
-import { ACCOUNT_TYPES, COLORS } from '@/lib/icons'
-import { Trash2 } from 'lucide-react'
+import { COLORS } from '@/lib/icons'
+import { INSTITUTIONS, OTHER_PRODUCTS, institutionById, productAccountName, type Product } from '@/lib/institutions'
 import { AmountInput } from '@/components/AmountInput'
-import { ACCOUNT_ICONS } from '@/components/icons'
+import { ACCOUNT_ICONS, AccountIcon, IconTile, InstitutionMark } from '@/components/icons'
 import { ColorPicker } from '@/components/Pickers'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { Alert, Button, Checkbox, Field } from '@/components/ui'
-import type { Account, AccountInput, AccountType } from '@/types'
+import type { Account, AccountInput } from '@/types'
 
-const AMOUNT_LABEL: Record<AccountType, string> = {
-  cash: 'Saldo inicial',
-  bank: 'Saldo inicial',
-  savings: 'Saldo inicial',
-  credit_card: 'Deuda actual de la tarjeta',
-  loan: 'Deuda actual (lo que te falta pagar)',
-  receivable: 'Monto que te deben',
-}
+type MoneyType = 'cash' | 'bank' | 'savings' | 'credit_card'
 
-/** "18,5" -> 18.5 ; "" -> null ; inválido -> NaN */
-function parseRate(s: string): number | null {
-  if (!s.trim()) return null
-  const n = Number(s.replace(',', '.'))
-  return Number.isFinite(n) && n >= 0 && n <= 999 ? n : NaN
+const TYPE_LABEL: Record<MoneyType, string> = {
+  cash: 'Efectivo', bank: 'Cuenta bancaria', savings: 'Cuenta de ahorro', credit_card: 'Tarjeta de crédito',
 }
+const CASH_COLOR = '#4f7a3a'
+
+/** Dónde está el dinero: efectivo, un banco de la lista u otro banco. */
+type Where = 'cash' | 'other' | string
+
+const chipCls = (active: boolean) =>
+  `pressable flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-sm border px-3 text-center text-sm leading-tight transition-colors duration-200
+   has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+     active ? 'border-ink bg-subtle font-semibold text-ink' : 'border-line bg-surface text-soft hover:text-ink'}`
 
 export function AccountForm({
   account, defaultType = 'bank', onDone,
-}: { account?: Account; defaultType?: AccountType; onDone: () => void }) {
+}: { account?: Account; defaultType?: MoneyType; onDone: () => void }) {
   const confirm = useConfirm()
   const toast = useToast()
-  const [name, setName] = useState(account?.name ?? '')
-  const [type, setType] = useState<AccountType>(account?.type ?? defaultType)
-  const isCard = type === 'credit_card'
-  const isLoan = type === 'loan'
-  const isReceivable = type === 'receivable'
-  const isDebt = isCard || isLoan
-  const [initial, setInitial] = useState<number | null>(account ? Math.abs(account.initial_balance) : null)
-  const [negative, setNegative] = useState(
-    account ? account.initial_balance < 0 && !['credit_card', 'loan'].includes(account.type) : false,
+  const editing = !!account
+
+  const [where, setWhere] = useState<Where | ''>(
+    account ? (account.type === 'cash' ? 'cash' : account.institution ?? 'other') : '',
   )
+  const [productId, setProductId] = useState<string | null>(null)
+  const [type, setType] = useState<MoneyType>((account?.type as MoneyType | undefined) ?? defaultType)
+  const [name, setName] = useState(account?.name ?? '')
+  const [nameTouched, setNameTouched] = useState(editing)
+  const [color, setColor] = useState(account?.color ?? COLORS[0])
+  const [colorTouched, setColorTouched] = useState(editing)
+  const [showBanks, setShowBanks] = useState(!editing)
+  const isCard = type === 'credit_card'
+  const [initial, setInitial] = useState<number | null>(account ? Math.abs(account.initial_balance) : null)
+  const [negative, setNegative] = useState(account ? account.initial_balance < 0 && account.type !== 'credit_card' : false)
   const [limit, setLimit] = useState<number | null>(account?.credit_limit ?? null)
   const [closingDay, setClosingDay] = useState(account?.closing_day?.toString() ?? '')
   const [paymentDay, setPaymentDay] = useState(account?.payment_day?.toString() ?? '')
-  const [counterparty, setCounterparty] = useState(account?.counterparty ?? '')
-  const [loanAmount, setLoanAmount] = useState<number | null>(account?.loan_amount ?? null)
-  const [loanInstallment, setLoanInstallment] = useState<number | null>(account?.loan_installment ?? null)
-  const [loanCount, setLoanCount] = useState(account?.loan_installments_count?.toString() ?? '')
-  const [rate, setRate] = useState(account?.interest_rate != null ? String(account.interest_rate).replace('.', ',') : '')
-  const [color, setColor] = useState(account?.color ?? COLORS[0])
   const [archived, setArchived] = useState(account?.archived ?? false)
+  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const inst = where && where !== 'cash' && where !== 'other' ? institutionById(where) : undefined
+  const products: Product[] = inst?.products ?? (where === 'other' ? OTHER_PRODUCTS : [])
+
+  function chooseWhere(w: Where) {
+    setWhere(w)
+    if (w === 'cash') {
+      setType('cash')
+      setProductId(null)
+      if (!nameTouched) setName('Efectivo')
+      if (!colorTouched) setColor(CASH_COLOR)
+      return
+    }
+    const next = institutionById(w)
+    if (!next) {
+      // Otro banco: se elige el tipo y se escribe el nombre.
+      if (type === 'cash') setType('bank')
+      setProductId(null)
+      if (!nameTouched) setName('')
+      if (!colorTouched) setColor(COLORS[0])
+      return
+    }
+    if (!colorTouched) setColor(next.color)
+    if (editing) {
+      if (type === 'cash') setType('bank')
+      return
+    }
+    // Al crear se preselecciona el primer producto (o la tarjeta si se llegó desde Deudas).
+    const p = next.products.find((x) => defaultType === 'credit_card' && x.type === 'credit_card') ?? next.products[0]
+    chooseProduct(p, next)
+  }
+
+  function chooseProduct(p: Product, i = inst) {
+    setProductId(p.id)
+    setType(p.type)
+    if (!nameTouched && i) setName(productAccountName(i, p))
+  }
+
   const dayError = (v: string) =>
     v && (!/^\d+$/.test(v) || +v < 1 || +v > 31) ? 'Debe ser un día entre 1 y 31.' : ''
-  const countError = loanCount && (+loanCount < 1 || +loanCount > 600) ? 'Entre 1 y 600 cuotas.' : ''
-  const rateError = Number.isNaN(parseRate(rate)) ? 'Ingresa un porcentaje válido (ej: 18,5).' : ''
+  const errors = {
+    where: !where ? 'Elige dónde está tu dinero.' : '',
+    name: !name.trim() ? 'Ponle un nombre a la cuenta.' : '',
+    closing: isCard ? dayError(closingDay) : '',
+    payment: isCard ? dayError(paymentDay) : '',
+  }
+  const show = (k: keyof typeof errors) => (submitted ? errors[k] : '')
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return setError('Ponle un nombre a la cuenta.')
-    if ((isCard && dayError(closingDay)) || (isDebt && dayError(paymentDay)) || (isLoan && (countError || rateError))) return
+    setSubmitted(true)
+    if (Object.values(errors).some(Boolean)) return
     setError('')
     setBusy(true)
     const amount = initial ?? 0
     const input: AccountInput = {
       name: name.trim(),
       type,
-      // Deudas: se guardan negativas. Otras: negativo solo si se marcó "sobregiro".
-      initial_balance: isDebt || (negative && !isReceivable) ? -amount : amount,
+      // Tarjeta: deuda guardada en negativo. Otras: negativo solo si se marcó "sobregiro".
+      initial_balance: isCard || negative ? -amount : amount,
       credit_limit: isCard ? limit : null,
       closing_day: isCard && closingDay ? +closingDay : null,
-      payment_day: isDebt && paymentDay ? +paymentDay : null,
-      counterparty: (isLoan || isReceivable) && counterparty.trim() ? counterparty.trim() : null,
-      loan_amount: isLoan ? loanAmount : null,
-      loan_installment: isLoan ? loanInstallment : null,
-      loan_installments_count: isLoan && loanCount ? +loanCount : null,
-      interest_rate: isLoan ? parseRate(rate) : null,
+      payment_day: isCard && paymentDay ? +paymentDay : null,
+      counterparty: null,
+      loan_amount: null,
+      loan_installment: null,
+      loan_installments_count: null,
+      interest_rate: null,
+      institution: type !== 'cash' && inst ? inst.id : null,
+      investment_kind: null,
       color,
       archived,
     }
@@ -121,90 +167,121 @@ export function AccountForm({
   }
 
   const digits = (v: string, max: number) => v.replace(/\D/g, '').slice(0, max)
+  const preview = { type, color, institution: type !== 'cash' && inst ? inst.id : null, investment_kind: null }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
       {error && <Alert>{error}</Alert>}
 
-      <Field label="Nombre" required maxLength={60} data-autofocus={!account || undefined}
-        placeholder={isLoan ? 'Ej: Crédito de consumo' : isReceivable ? 'Ej: Préstamo a Juan' : 'Ej: Cuenta RUT, Visa Banco X'}
-        value={name} onChange={(e) => setName(e.target.value)} />
-
-      <fieldset className="flex flex-col gap-1.5">
-        <legend className="mb-1.5 text-[0.8125rem] font-medium text-soft">Tipo</legend>
-        <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(ACCOUNT_TYPES) as AccountType[]).map((t) => {
-            const Icon = ACCOUNT_ICONS[t]
-            return (
-              <label key={t}
-                className={`pressable flex min-h-12 cursor-pointer items-center gap-2.5 rounded-sm border px-3 text-sm transition-colors duration-200
-                  has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
-                  type === t ? 'border-ink bg-subtle font-semibold text-ink' : 'border-line bg-surface text-soft hover:text-ink'}`}>
-                <input type="radio" name="account-type" className="sr-only" checked={type === t} onChange={() => setType(t)} />
-                <Icon size={18} strokeWidth={type === t ? 2 : 1.75} aria-hidden />{ACCOUNT_TYPES[t].label}
-              </label>
-            )
-          })}
+      {showBanks ? (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 text-[0.8125rem] font-medium text-soft">¿Dónde está tu dinero?</legend>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+            <WhereTile active={where === 'cash'} onSelect={() => chooseWhere('cash')} label="Efectivo"
+              logo={<IconTile icon={Banknote} color={CASH_COLOR} />} />
+            {INSTITUTIONS.map((i) => (
+              <WhereTile key={i.id} active={where === i.id} onSelect={() => chooseWhere(i.id)} label={i.short}
+                logo={<InstitutionMark id={i.id} />} />
+            ))}
+            <WhereTile active={where === 'other'} onSelect={() => chooseWhere('other')} label="Otro banco"
+              logo={<IconTile icon={Landmark} />} />
+          </div>
+          {show('where') && <p className="text-sm font-medium text-neg">{show('where')}</p>}
+        </fieldset>
+      ) : (
+        <div className="flex items-center gap-3 rounded-sm border border-line px-3.5 py-3">
+          <AccountIcon account={preview} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{where === 'cash' ? 'Efectivo' : inst?.name ?? 'Otro banco'}</p>
+            <p className="text-xs text-muted">{TYPE_LABEL[type]}</p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowBanks(true)}>Cambiar banco</Button>
         </div>
-      </fieldset>
-
-      {(isLoan || isReceivable) && (
-        <Field label={isLoan ? '¿A quién le debes? (banco o persona)' : '¿Quién te debe?'} maxLength={80}
-          placeholder={isLoan ? 'Ej: Banco Estado' : 'Ej: Juan'} value={counterparty}
-          onChange={(e) => setCounterparty(e.target.value)} />
       )}
 
-      <AmountInput label={AMOUNT_LABEL[type]} value={initial} onChange={setInitial} />
-      {!isDebt && !isReceivable && (
-        <Checkbox label="El saldo inicial es negativo (sobregiro / línea de crédito)" checked={negative} onChange={setNegative} />
-      )}
-
-      {isCard && (
-        <>
-          <AmountInput label="Cupo total" value={limit} onChange={setLimit} />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Día de cierre" inputMode="numeric" placeholder="Ej: 20" value={closingDay}
-              error={dayError(closingDay)} onChange={(e) => setClosingDay(digits(e.target.value, 2))} />
-            <Field label="Día de pago" inputMode="numeric" placeholder="Ej: 5" value={paymentDay}
-              error={dayError(paymentDay)} onChange={(e) => setPaymentDay(digits(e.target.value, 2))} />
+      {where && where !== 'cash' && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 text-[0.8125rem] font-medium text-soft">Tipo de cuenta</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {editing || !inst
+              ? (['bank', 'savings', 'credit_card'] as const).map((t) => (
+                <label key={t} className={chipCls(type === t)}>
+                  <input type="radio" name="account-type" className="sr-only" checked={type === t} onChange={() => setType(t)} />
+                  {(() => { const Icon = ACCOUNT_ICONS[t]; return <Icon size={18} strokeWidth={type === t ? 2 : 1.75} aria-hidden /> })()}
+                  {TYPE_LABEL[t]}
+                </label>
+              ))
+              : products.map((p) => (
+                <label key={p.id} className={chipCls(productId === p.id)}>
+                  <input type="radio" name="account-product" className="sr-only" checked={productId === p.id}
+                    onChange={() => chooseProduct(p)} />
+                  {p.label}
+                </label>
+              ))}
           </div>
-          <Alert kind="info">Para pagar la tarjeta usa <strong>Pagar</strong> en Deudas y cuotas (es una transferencia desde tu cuenta, no un gasto).</Alert>
+        </fieldset>
+      )}
+
+      {where && (
+        <>
+          <Field label="Nombre" required maxLength={60} error={show('name')}
+            placeholder={where === 'other' ? 'Ej: Cuenta Corriente Banco X' : 'Ej: Cuenta para gastos'}
+            value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
+
+          <AmountInput
+            label={isCard ? (editing ? 'Deuda al agregarla' : 'Deuda actual de la tarjeta') : editing ? 'Saldo al agregarla' : 'Saldo actual'}
+            hint={editing ? 'Es el punto de partida: el saldo de hoy se calcula sumando tus movimientos.' : undefined}
+            value={initial} onChange={setInitial} />
+          {!isCard && (
+            <Checkbox label="El saldo es negativo (sobregiro o línea de crédito)" checked={negative} onChange={setNegative} />
+          )}
+
+          {isCard && (
+            <>
+              <AmountInput label="Cupo total" value={limit} onChange={setLimit} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Día de cierre" inputMode="numeric" placeholder="Ej: 20" value={closingDay}
+                  error={show('closing')} onChange={(e) => setClosingDay(digits(e.target.value, 2))} />
+                <Field label="Día de pago" inputMode="numeric" placeholder="Ej: 5" value={paymentDay}
+                  error={show('payment')} onChange={(e) => setPaymentDay(digits(e.target.value, 2))} />
+              </div>
+              <Alert kind="info">Para pagar la tarjeta usa <strong>Pagar</strong> en Deudas y cuotas (es una transferencia desde tu cuenta, no un gasto).</Alert>
+            </>
+          )}
+
+          <ColorPicker value={color} onChange={(c) => { setColor(c); setColorTouched(true) }}
+            suggested={inst?.color} suggestedLabel={inst ? `Color de ${inst.name}` : undefined} />
+
+          <div className="flex items-center gap-3 rounded-sm bg-subtle/70 px-3.5 py-3" aria-hidden>
+            <AccountIcon account={preview} />
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{name.trim() || 'Nombre de la cuenta'}</p>
+              <p className="text-xs text-muted">Así se verá en tus cuentas</p>
+            </div>
+          </div>
+
+          {account && (
+            <Checkbox label="Archivar" hint="Se oculta de los formularios y conserva su historial." checked={archived} onChange={setArchived} />
+          )}
+
+          <Button type="submit" size="lg" loading={busy}>{account ? 'Guardar cambios' : 'Crear cuenta'}</Button>
         </>
       )}
-
-      {isLoan && (
-        <>
-          <AmountInput label="Monto original del préstamo (opcional)" value={loanAmount} onChange={setLoanAmount} />
-          <div className="grid grid-cols-2 gap-3">
-            <AmountInput label="Cuota mensual (opcional)" value={loanInstallment} onChange={setLoanInstallment} />
-            <Field label="N° de cuotas (opcional)" inputMode="numeric" placeholder="Ej: 36" value={loanCount}
-              error={countError} onChange={(e) => setLoanCount(digits(e.target.value, 3))} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Tasa anual % (opcional)" inputMode="decimal" placeholder="Ej: 18,5" value={rate}
-              error={rateError} onChange={(e) => setRate(e.target.value.replace(/[^\d,.]/g, '').slice(0, 7))} />
-            <Field label="Día de pago (opcional)" inputMode="numeric" placeholder="Ej: 10" value={paymentDay}
-              error={dayError(paymentDay)} onChange={(e) => setPaymentDay(digits(e.target.value, 2))} />
-          </div>
-          <Alert kind="info">
-            Cada pago se registra con <strong>Registrar pago</strong> en Deudas y cuotas: es una transferencia desde tu
-            cuenta, así el capital no se cuenta como gasto. Si quieres, anota los intereses como un gasto aparte.
-          </Alert>
-        </>
-      )}
-
-      {isReceivable && (
-        <Alert kind="info">Cuando te paguen, usa <strong>Registrar cobro</strong> en Deudas y cuotas (transferencia hacia tu cuenta).</Alert>
-      )}
-
-      <ColorPicker value={color} onChange={setColor} />
-
-      {account && (
-        <Checkbox label="Archivar" hint="Se oculta de los formularios y conserva su historial." checked={archived} onChange={setArchived} />
-      )}
-
-      <Button type="submit" size="lg" loading={busy}>{account ? 'Guardar cambios' : 'Crear cuenta'}</Button>
       {account && <Button type="button" variant="ghost" icon={Trash2} className="text-neg" onClick={onDelete}>Eliminar cuenta</Button>}
     </form>
+  )
+}
+
+function WhereTile({ active, onSelect, label, logo }: {
+  active: boolean; onSelect: () => void; label: string; logo: ReactNode
+}) {
+  return (
+    <label className={`pressable flex cursor-pointer flex-col items-center gap-1.5 rounded-sm border px-0.5 pt-2.5 pb-2 text-center transition-colors duration-200
+      has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+        active ? 'border-ink bg-subtle' : 'border-transparent hover:bg-subtle/60'}`}>
+      <input type="radio" name="account-where" className="sr-only" checked={active} onChange={onSelect} />
+      {logo}
+      <span className={`line-clamp-2 w-full text-[0.6875rem] leading-tight break-words ${active ? 'font-semibold text-ink' : 'text-soft'}`}>{label}</span>
+    </label>
   )
 }

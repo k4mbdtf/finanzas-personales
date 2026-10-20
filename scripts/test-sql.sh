@@ -3,7 +3,8 @@
 # No toca Supabase. Uso: npm run test:sql   (requiere Docker en ejecución)
 #
 # Orden: imitación de Supabase -> migraciones 0001..0004 -> datos "existentes"
-#        -> migración 0005 (sobre esos datos) -> pruebas de la Etapa 2.
+#        -> 0005 (sobre esos datos) -> pruebas de la Etapa 2 -> más datos "existentes"
+#        -> 0006 (sobre esos datos) -> pruebas de deudas, bancos e inversiones.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -30,5 +31,8 @@ run() {
 run supabase/tests/00_supabase_stub.sql
 for f in supabase/migrations/000[1-4]_*.sql; do run "$f"; done
 run supabase/tests/10_data_before_0005.sql
-for f in supabase/migrations/000[5-9]_*.sql; do run "$f"; done
+run supabase/migrations/0005_etapa2.sql
 run supabase/tests/20_etapa2.sql
+run supabase/tests/25_data_before_0006.sql
+run supabase/migrations/0006_deudas_inversiones.sql
+run supabase/tests/30_deudas_inversiones.sql

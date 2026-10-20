@@ -6,10 +6,14 @@ import { categoryIcon } from './icons'
 
 const legendCls = 'mb-1.5 text-[0.8125rem] font-medium text-soft'
 
-export function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+/** suggested: color que siempre se ofrece primero (p. ej. el del banco). */
+export function ColorPicker({ value, onChange, suggested, suggestedLabel = 'Color sugerido' }: {
+  value: string; onChange: (c: string) => void; suggested?: string; suggestedLabel?: string
+}) {
   const name = useId()
-  // Si el color guardado no está en la paleta (colores antiguos), se muestra igual.
-  const colors = COLORS.includes(value) ? COLORS : [value, ...COLORS]
+  // El sugerido va primero; si el color guardado no está en la paleta (colores antiguos), se muestra igual.
+  const colors = [...new Set([suggested, value, ...COLORS].filter((c): c is string => !!c).map((c) => c.toLowerCase()))]
+  value = value.toLowerCase()
   return (
     <fieldset>
       <legend className={legendCls}>Color</legend>
@@ -23,7 +27,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (c: 
               style={{ backgroundColor: c }}
             >
               {value === c && <Check size={16} strokeWidth={2.5} aria-hidden />}
-              <span className="sr-only">Color {i + 1}</span>
+              <span className="sr-only">{c === suggested?.toLowerCase() ? suggestedLabel : `Color ${i + 1}`}</span>
             </span>
           </label>
         ))}

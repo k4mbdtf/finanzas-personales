@@ -2,7 +2,7 @@
 //   MAIN_NAV: barra inferior en celular (4 + "Más") y arriba en la sidebar.
 //   MORE_NAV: en celular se llega desde la página "Más"; en escritorio, sidebar.
 import {
-  ArrowLeftRight, ChartLine, FileUp, HandCoins, House, PiggyBank, Repeat, Settings, Tags, Target, Wallet,
+  ArrowLeftRight, ChartLine, FileUp, HandCoins, House, PiggyBank, Repeat, Settings, Tags, Target, TrendingUp, Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -16,7 +16,8 @@ export const MAIN_NAV: NavItem[] = [
 ]
 
 export const MORE_NAV: NavItem[] = [
-  { to: '/deudas', label: 'Deudas y cuotas', icon: HandCoins, hint: 'Préstamos, tarjetas, compras en cuotas y lo que te deben' },
+  { to: '/deudas', label: 'Deudas y cuotas', icon: HandCoins, hint: 'Lo que debes, tarjetas, compras en cuotas y lo que te deben' },
+  { to: '/inversiones', label: 'Inversiones', icon: TrendingUp, hint: 'Lo que aportas a cada una, cuánto vale y cuánto ganas' },
   { to: '/metas', label: 'Metas de ahorro', icon: PiggyBank, hint: 'Ahorra para algo y sigue tu avance' },
   { to: '/recurrentes', label: 'Recurrentes', icon: Repeat, hint: 'Sueldo, arriendo y suscripciones automáticas' },
   { to: '/patrimonio', label: 'Patrimonio', icon: ChartLine, hint: 'Lo que tienes menos lo que debes, mes a mes' },

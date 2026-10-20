@@ -40,14 +40,14 @@ export default function NetWorthPage() {
       {q.error && <Alert>{q.error}</Alert>}
       {q.loading && !q.data ? <Loading label="Calculando patrimonio…" rows={4} /> : empty ? (
         <EmptyState icon={ChartLine} title="Aún no hay datos">
-          Crea tus cuentas y deudas con su saldo actual y registra movimientos: aquí verás cómo crece tu patrimonio mes a mes.
+          Crea tus cuentas, deudas e inversiones con su saldo actual y registra movimientos: aquí verás cómo crece tu patrimonio mes a mes.
         </EmptyState>
       ) : last && (
         <div className={`flex flex-col gap-6 transition-opacity duration-200 ${q.loading ? 'opacity-60' : ''}`}>
           <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Tile label="Patrimonio neto" value={last.net} valueClass={last.net < 0 ? 'text-neg' : ''} />
-            <Tile label="Activos" value={last.assets} hint="Efectivo, bancos, ahorro y lo que te deben" />
-            <Tile label="Deudas" value={last.liabilities} valueClass="text-neg" hint="Tarjetas y préstamos" />
+            <Tile label="Activos" value={last.assets} hint="Cuentas, inversiones (a su valor) y lo que te deben" />
+            <Tile label="Deudas" value={last.liabilities} valueClass="text-neg" hint="Tarjetas y deudas" />
             <div className="card flex flex-col gap-2 p-4 md:p-5">
               <p className="label-caps">Cambio en {range} meses</p>
               <p className={`figure-hero flex items-center gap-1 text-[1.375rem] leading-tight sm:text-[1.75rem] ${change > 0 ? 'text-pos' : change < 0 ? 'text-neg' : ''}`}>

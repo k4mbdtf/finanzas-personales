@@ -203,10 +203,15 @@ console.log('\n7d. Etapa 2: metas, recurrentes, cuotas, importaciones, patrimoni
 
   const now = new Date().toISOString().slice(0, 8) + '01'
   r = await A.rpc('net_worth_by_month', { p_from: now, p_to: now })
-  const { data: bals } = await A.from('account_balances').select('balance')
-  const sum = bals.reduce((s, b) => s + Number(b.balance), 0)
+  // Las inversiones cuentan por su valor actual (0006), el resto por su saldo.
+  const { data: invRows } = await A.from('accounts').select('id').eq('type', 'investment')
+  const invIds = new Set(invRows.map((x) => x.id))
+  const { data: bals } = await A.from('account_balances').select('account_id, balance')
+  const { data: invStatus } = await A.from('investment_status').select('current_value')
+  const sum = bals.filter((b) => !invIds.has(b.account_id)).reduce((s, b) => s + Number(b.balance), 0)
+    + invStatus.reduce((s, x) => s + Number(x.current_value), 0)
   check(!r.error && Number(r.data[0].assets) - Number(r.data[0].liabilities) === sum,
-    `Patrimonio de Ana = suma de sus saldos (${sum})`, r.error?.message)
+    `Patrimonio de Ana = saldos + valor de inversiones (${sum})`, r.error?.message)
 
   const { createClient } = await import('@supabase/supabase-js')
   const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
@@ -223,6 +228,37 @@ console.log('\n7d. Etapa 2: metas, recurrentes, cuotas, importaciones, patrimoni
     const { error } = await anon.rpc(fn, args)
     check(!!error, `anon no puede ejecutar ${fn}`, error?.message)
   }
+}
+
+console.log('\n7e. Deudas separadas, bancos e inversiones (0006)')
+{
+  for (const t of ['investment_valuations', 'investment_status']) {
+    const { data, error } = await A.from(t).select('user_id')
+    check(!error && data.every((r) => r.user_id === ana.userId), `Ana solo ve sus filas de ${t} (${data?.length ?? 0})`, error?.message)
+  }
+  const bInv = (await B.from('accounts').select('id').eq('type', 'investment').limit(1)).data[0]?.id
+  check(!!bInv, 'Bruno tiene una inversión de prueba (seed)')
+  let r = await A.from('investment_status').select('*').eq('account_id', bInv)
+  check(r.data.length === 0, 'Ana no puede leer el estado de la inversión de Bruno')
+  r = await A.from('investment_valuations').insert({ account_id: bInv, value: 1 })
+  check(!!r.error, 'Ana no puede registrar un valor en la inversión de Bruno', r.error?.message)
+  r = await A.rpc('create_tracked_account', { p_account: { type: 'receivable', name: 'x' }, p_cash_account: bAcc, p_cash_amount: 100 })
+  check(!!r.error, 'Ana no puede sacar dinero de la cuenta de Bruno al crear una deuda', r.error?.message)
+  const aCat = (await A.from('categories').select('id').eq('kind', 'expense').limit(1)).data[0].id
+  const aLoan = (await A.from('accounts').select('id').eq('type', 'loan').limit(1)).data[0]?.id
+  if (aLoan) {
+    r = await A.from('transactions').insert({ type: 'expense', amount: 1, account_id: aLoan, category_id: aCat })
+    check(!!r.error, 'Un gasto anotado en una deuda se rechaza', r.error?.message)
+  }
+
+  const { createClient } = await import('@supabase/supabase-js')
+  const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  for (const t of ['investment_valuations', 'investment_status']) {
+    const { data, error } = await anon.from(t).select('*')
+    check(!!error || data.length === 0, `anon no lee ${t}`, error?.message)
+  }
+  r = await anon.rpc('create_tracked_account', { p_account: { type: 'loan', name: 'x' } })
+  check(!!r.error, 'anon no puede ejecutar create_tracked_account', r.error?.message)
 }
 
 console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)')
@@ -250,11 +286,16 @@ console.log('\n8. Alta automática y eliminación de cuenta (usuario desechable)
   await client.rpc('import_transactions', {
     p_account_id: acc.id, p_filename: 'temp.csv', p_rows: [{ type: 'income', amount: 7, date: '2026-01-02', import_hash: 'temp-1' }],
   })
+  // Inversión con aporte y valor (0006).
+  await client.rpc('create_tracked_account', {
+    p_account: { type: 'investment', name: 'Temp', investment_kind: 'fund' },
+    p_cash_account: acc.id, p_cash_amount: 5, p_value: 6,
+  })
   const { error } = await client.rpc('delete_my_account')
-  check(!error, 'delete_my_account se ejecuta (con datos de la Etapa 2)', error?.message)
+  check(!error, 'delete_my_account se ejecuta (con datos de la Etapa 2 e inversiones)', error?.message)
   let leftovers = 0
   for (const t of ['transactions', 'accounts', 'categories', 'budgets', 'goals', 'goal_contributions',
-                   'recurring_rules', 'installment_plans', 'import_batches', 'profiles']) {
+                   'recurring_rules', 'installment_plans', 'import_batches', 'investment_valuations', 'profiles']) {
     const { data } = await admin.from(t).select('user_id').eq('user_id', userId)
     leftovers += data?.length ?? 0
   }

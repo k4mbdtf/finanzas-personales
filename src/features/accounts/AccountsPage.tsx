@@ -1,11 +1,17 @@
+// Cuentas: solo donde está tu dinero (efectivo, bancos, ahorro y tarjetas).
+// Las deudas y las inversiones tienen su propia sección; aquí solo se enlazan.
 import { useState } from 'react'
-import { ChevronDown, Plus, Wallet } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronRight, HandCoins, Plus, TrendingUp, Wallet, type LucideIcon } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { listInvestmentStatus } from '@/data/investments'
+import { useQuery } from '@/hooks/useQuery'
 import { formatCLP } from '@/lib/format'
 import { ACCOUNT_TYPES } from '@/lib/icons'
-import { cardStatus, loanStatus } from '@/lib/debt'
+import { cardStatus, debtOf } from '@/lib/debt'
+import { institutionById, normalizeName } from '@/lib/institutions'
 import { useAnimatedNumber } from '@/lib/motion'
-import { ACCOUNT_ICONS, IconTile } from '@/components/icons'
+import { AccountIcon, IconTile } from '@/components/icons'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/Modal'
 import { Alert, Button, EmptyState, Loading, PageHeader } from '@/components/ui'
@@ -13,7 +19,8 @@ import type { AccountWithBalance } from '@/types'
 import { AccountForm } from './AccountForm'
 
 export default function AccountsPage() {
-  const { accounts, loading, error } = useRefData()
+  const { accounts, debts, investments, loading, error } = useRefData()
+  const status = useQuery(listInvestmentStatus, [], ['accounts', 'transactions', 'investments'])
   const [editing, setEditing] = useState<AccountWithBalance | 'new' | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
@@ -21,6 +28,11 @@ export default function AccountsPage() {
   const archived = accounts.filter((a) => a.archived)
   const total = active.reduce((s, a) => s + a.balance, 0)
   const shownTotal = useAnimatedNumber(total)
+  const activeDebts = debts.filter((a) => !a.archived)
+  const owe = activeDebts.filter((a) => a.type === 'loan').reduce((s, a) => s + debtOf(a), 0)
+  const owed = activeDebts.filter((a) => a.type === 'receivable').reduce((s, a) => s + Math.max(0, a.balance), 0)
+  const activeInvestments = investments.filter((a) => !a.archived)
+  const invested = activeInvestments.reduce((s, a) => s + (status.data?.get(a.id)?.current_value ?? a.balance), 0)
 
   return (
     <div className="flex flex-col gap-8">
@@ -33,8 +45,8 @@ export default function AccountsPage() {
       ) : active.length === 0 && archived.length === 0 ? (
         <EmptyState icon={Wallet} title="Crea tu primera cuenta"
           action={<Button icon={Plus} onClick={() => setEditing('new')}>Nueva cuenta</Button>}>
-          Agrega donde tienes tu dinero: efectivo, cuenta bancaria, ahorro o tarjeta de crédito,
-          con su saldo actual. Después podrás registrar movimientos en ellas.
+          Agrega donde tienes tu dinero: efectivo, tu CuentaRUT, cuenta corriente, ahorro o tarjeta de crédito,
+          con su saldo actual. Elige tu banco y se pone su logo y color.
         </EmptyState>
       ) : (
         <>
@@ -44,12 +56,24 @@ export default function AccountsPage() {
             <p className="figure-hero mt-2 text-[2.25rem] leading-none md:text-[3rem]">
               <span className="sr-only">{formatCLP(total)}</span><span aria-hidden>{formatCLP(shownTotal)}</span>
             </p>
-            <p className="mt-3 text-sm opacity-75">Lo que tienes menos tus deudas (tarjetas y préstamos restan).</p>
+            <p className="mt-3 text-sm opacity-75">Lo que tienes en tus cuentas; lo usado en tarjetas resta.</p>
           </div>
 
-          <ul className="stagger grid gap-3 sm:grid-cols-2">
+          <ul className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2">
             {active.map((a) => <AccountCard key={a.id} account={a} onClick={() => setEditing(a)} />)}
           </ul>
+
+          {(activeDebts.length > 0 || activeInvestments.length > 0) && (
+            <ul className="card overflow-hidden">
+              {activeDebts.length > 0 && (
+                <ElsewhereRow to="/deudas" icon={HandCoins} title="Deudas y préstamos"
+                  detail={[owe > 0 && `Debes ${formatCLP(owe)}`, owed > 0 && `te deben ${formatCLP(owed)}`].filter(Boolean).join(' · ') || 'Al día'} />
+              )}
+              {activeInvestments.length > 0 && (
+                <ElsewhereRow to="/inversiones" icon={TrendingUp} title="Inversiones" detail={`Valen ${formatCLP(invested)}`} />
+              )}
+            </ul>
+          )}
 
           {archived.length > 0 && (
             <section>
@@ -60,7 +84,7 @@ export default function AccountsPage() {
                   className={`transition-transform duration-300 ease-soft ${showArchived ? 'rotate-180' : ''}`} />
               </button>
               {showArchived && (
-                <ul className="stagger mt-3 grid gap-3 opacity-75 sm:grid-cols-2">
+                <ul className="stagger mt-3 grid grid-cols-1 gap-3 opacity-75 sm:grid-cols-2">
                   {archived.map((a) => <AccountCard key={a.id} account={a} onClick={() => setEditing(a)} />)}
                 </ul>
               )}
@@ -77,11 +101,34 @@ export default function AccountsPage() {
   )
 }
 
+/** "Banco Falabella · Cuenta bancaria", sin repetir lo que ya dice el nombre. */
+function accountSubtitle(name: string, instName: string | undefined, instShort: string | undefined, typeLabel: string) {
+  const n = normalizeName(name)
+  const showInst = instName && !n.includes(normalizeName(instShort ?? instName))
+  const showType = !n.includes(normalizeName(typeLabel))
+  return [showInst && instName, showType && typeLabel].filter(Boolean).join(' · ')
+}
+
+/** Enlace a lo que no es una cuenta (deudas, inversiones), para encontrarlo rápido. */
+function ElsewhereRow({ to, icon, title, detail }: { to: string; icon: LucideIcon; title: string; detail: string }) {
+  return (
+    <li className="border-b border-line last:border-0">
+      <Link to={to} className="pressable flex items-center gap-3.5 px-4 py-3.5 hover:bg-subtle/60">
+        <IconTile icon={icon} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">{title}</span>
+          <span className="block text-xs text-muted">{detail}</span>
+        </span>
+        <ChevronRight size={18} strokeWidth={2} className="shrink-0 text-muted" aria-hidden />
+      </Link>
+    </li>
+  )
+}
+
 function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onClick: () => void }) {
-  const t = ACCOUNT_TYPES[a.type]
+  const inst = institutionById(a.institution)
   const isCard = a.type === 'credit_card'
   const { debt, available, usedPct } = cardStatus(a)
-  const loan = a.type === 'loan' ? loanStatus(a) : null
   const amountCls = 'figure-hero text-[1.375rem] leading-tight'
 
   return (
@@ -89,10 +136,10 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
       <button onClick={onClick}
         className="card flex h-full w-full flex-col gap-3 p-4 text-left transition-[border-color,transform] duration-200 hover:border-line-strong/40 active:scale-[0.99] md:p-5">
         <div className="flex items-center gap-3">
-          <IconTile icon={ACCOUNT_ICONS[a.type]} color={a.color} />
+          <AccountIcon account={a} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{a.name}{a.archived && ' (archivada)'}</p>
-            <p className="text-[0.8125rem] text-muted">{t.label}</p>
+            <p className="truncate text-[0.8125rem] text-muted">{accountSubtitle(a.name, inst?.name, inst?.short, ACCOUNT_TYPES[a.type].label)}</p>
           </div>
         </div>
 
@@ -112,25 +159,6 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
               {a.payment_day && <>Paga el {a.payment_day}</>}
             </p>
           </>
-        ) : loan ? (
-          <>
-            <div>
-              <p className="label-caps">Debes</p>
-              <p className={amountCls}>{formatCLP(loan.debt)}</p>
-            </div>
-            {loan.pct != null && <ProgressBar pct={loan.pct} label={`Pagado: ${loan.pct}%`} barClass="bg-pos-bar" />}
-            <p className="text-xs text-muted">
-              {a.counterparty && <>{a.counterparty} · </>}
-              {loan.pct != null && <>{loan.pct}% pagado · </>}
-              {a.payment_day && <>Paga el {a.payment_day}</>}
-            </p>
-          </>
-        ) : a.type === 'receivable' ? (
-          <div>
-            <p className="label-caps">Te deben</p>
-            <p className={amountCls}>{formatCLP(Math.max(0, a.balance))}</p>
-            {a.counterparty && <p className="mt-1 text-xs text-muted">{a.counterparty}</p>}
-          </div>
         ) : (
           <div>
             <p className="label-caps">Saldo</p>

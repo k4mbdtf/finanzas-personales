@@ -5,12 +5,13 @@ import { Field } from './ui'
 const MAX_DIGITS = 12 // hasta $999.999.999.999
 
 export function AmountInput({
-  label, value, onChange, error, autoFocus, big,
+  label, value, onChange, error, hint, autoFocus, big,
 }: {
   label: string
   value: number | null
   onChange: (v: number | null) => void
   error?: string
+  hint?: string
   autoFocus?: boolean
   big?: boolean
 }) {
@@ -24,6 +25,7 @@ export function AmountInput({
       placeholder="$0"
       data-autofocus={autoFocus || undefined}
       error={error}
+      hint={hint}
       value={value == null ? '' : formatCLP(value)}
       onChange={(e) => {
         const digits = e.target.value.replace(/\D/g, '').slice(0, MAX_DIGITS)

@@ -1,9 +1,9 @@
 // Lista de movimientos agrupada por día. Se reutiliza en Inicio (últimos movimientos).
-import { Repeat } from 'lucide-react'
+import { CreditCard, HandCoins, Repeat, TrendingUp, type LucideIcon } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
 import { dayLabel } from '@/lib/dates'
 import { formatCLP } from '@/lib/format'
-import { isLiability } from '@/lib/icons'
+import { TRANSFER_LABEL, transferKind, type TransferKind } from '@/lib/accounts'
 import { CategoryIcon, IconTile, TransferIcon } from '@/components/icons'
 import type { Transaction } from '@/types'
 
@@ -12,6 +12,11 @@ const TYPE_STYLE = {
   expense: { sign: '−', label: 'Gasto', cls: 'text-neg' },
   transfer: { sign: '', label: 'Transferencia', cls: 'text-soft' },
 } as const
+
+const TRANSFER_ICON: Record<TransferKind, LucideIcon> = {
+  card_payment: CreditCard, debt_payment: HandCoins, loan_received: HandCoins, lent: HandCoins,
+  collected: HandCoins, contribution: TrendingUp, withdrawal: TrendingUp, transfer: TransferIcon,
+}
 
 export function TransactionList({
   rows, onSelect, grouped = true,
@@ -50,9 +55,9 @@ function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) =>
   const to = toAcc?.name ?? 'Cuenta'
   const style = TYPE_STYLE[tx.type]
 
-  // Transferencias hacia una deuda = pago; desde "me deben" = cobro.
-  const transferTitle = toAcc && isLiability(toAcc.type) ? 'Pago' : fromAcc?.type === 'receivable' ? 'Cobro' : 'Transferencia'
-  const title = tx.type === 'transfer' ? transferTitle : cat?.name ?? 'Sin categoría'
+  // Pago de deuda o tarjeta, cobro, aporte, rescate... según las cuentas.
+  const kind = transferKind(fromAcc?.type, toAcc?.type)
+  const title = tx.type === 'transfer' ? TRANSFER_LABEL[kind] : cat?.name ?? 'Sin categoría'
   const subtitle = [tx.note, tx.type === 'transfer' ? `${from} → ${to}` : from].filter(Boolean).join(' · ')
 
   return (
@@ -60,7 +65,7 @@ function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) =>
       <button onClick={() => onSelect(tx)}
         className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors duration-200 hover:bg-subtle/60 active:bg-subtle">
         {tx.type === 'transfer'
-          ? <IconTile icon={TransferIcon} />
+          ? <IconTile icon={TRANSFER_ICON[kind]} />
           : <CategoryIcon name={cat?.icon} color={cat?.color} />}
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 font-medium">

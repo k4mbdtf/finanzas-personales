@@ -50,6 +50,10 @@ export function Button({
   )
 }
 
+/** Clases de <Button> para un enlace (<Link>) que se ve como botón. */
+export const buttonClass = (variant: keyof typeof BUTTON_VARIANT = 'primary', size: keyof typeof BUTTON_SIZE = 'md') =>
+  `pressable inline-flex select-none items-center justify-center rounded-sm font-semibold tracking-[-0.01em] ${BUTTON_VARIANT[variant]} ${BUTTON_SIZE[size]}`
+
 /** Indicador de actividad en botones (tres puntos; sin spinner circular). */
 function Dots() {
   return (
