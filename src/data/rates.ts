@@ -4,6 +4,7 @@
 //  3) Si tampoco se puede, null: el formulario pide el valor a mano (saveRate).
 import { supabase } from '@/lib/supabase'
 import { unwrap } from '@/lib/errors'
+import { emitChange } from '@/lib/events'
 import { addDays } from '@/lib/dates'
 import type { ForeignCurrency, Rates } from '@/lib/currency'
 
@@ -55,6 +56,7 @@ export async function getRate(currency: ForeignCurrency, date: string): Promise<
 export async function saveRate(currency: ForeignCurrency, date: string, clp: number): Promise<void> {
   unwrap(await supabase.from('exchange_rates').upsert({ currency, date, clp }))
   cache.set(`${currency}|${date}`, clp)
+  emitChange('rates')
 }
 
 /** Valores de hoy de las monedas pedidas (las que falten quedan fuera). */

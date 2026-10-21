@@ -125,3 +125,16 @@ export function txAmounts(shape: TxShape, fromValue: number, toValue: number | n
 
 /** Cuenta en pesos (recurrentes, cuotas, importación, metas y movimientos iniciales: solo en pesos por ahora). */
 export const inPesos = (a: { currency?: Currency | null }) => currencyOf(a) === 'CLP'
+
+/**
+ * La cuenta con sus montos en su propia moneda, para usar los cálculos de deudas y tarjetas
+ * (loanStatus, receivableStatus, cardStatus) tal cual: saldo en su moneda y, como lo
+ * pagado/cobrado se registra en pesos, convertido al valor de hoy (aproximado).
+ */
+export function nativeView<T extends MaybeForeign & { inflow: number; outflow: number }>(a: T, rates: Rates): T {
+  const cur = currencyOf(a)
+  if (cur === 'CLP') return a
+  const rate = rates[cur]
+  const conv = (clp: number) => (rate ? Math.round((clp / rate) * 100) / 100 : 0)
+  return { ...a, balance: nativeBalance(a), inflow: conv(a.inflow), outflow: conv(a.outflow) }
+}

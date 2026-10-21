@@ -8,7 +8,7 @@ import { useRefData } from '@/context/RefData'
 import { listPlans } from '@/data/installments'
 import { listRules } from '@/data/recurring'
 import { useQuery } from '@/hooks/useQuery'
-import { balanceCLP, currencyOf, nativeBalance } from '@/lib/currency'
+import { balanceCLP, currencyOf, nativeBalance, type ForeignCurrency } from '@/lib/currency'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
 import { dueLabel, upcomingPayments, type Upcoming, type UpcomingKind } from '@/lib/upcoming'
 import { IconTile } from '@/components/icons'
@@ -35,7 +35,15 @@ export function UpcomingPayments() {
   const today = todayISO()
   const items = upcomingPayments({
     // Tarjetas en UF/USD: su deuda en pesos de hoy.
-    today, days: DAYS, accounts: [...accounts, ...debts].map((a) => ({ ...a, balance: balanceCLP(a, rates) })), rules, plans,
+    // Préstamos en UF/USD: la cuota también en pesos de hoy.
+    today, days: DAYS, rules, plans,
+    accounts: [...accounts, ...debts].map((a) => {
+      const rate = currencyOf(a) === 'CLP' ? 1 : rates[currencyOf(a) as ForeignCurrency]
+      return {
+        ...a, balance: balanceCLP(a, rates),
+        loan_installment: a.loan_installment == null ? null : rate ? Math.round(Number(a.loan_installment) * rate) : null,
+      }
+    }),
     ruleTitle: (r) => {
       const rule = rules.find((x) => x.id === r.id)
       const cat = rule?.category_id ? categoryById.get(rule.category_id)?.name : undefined

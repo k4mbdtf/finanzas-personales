@@ -9,6 +9,7 @@ import { listTransactions } from '@/data/transactions'
 import { useQuery } from '@/hooks/useQuery'
 import { isDebtType } from '@/lib/accounts'
 import { loanStatus, receivableStatus } from '@/lib/debt'
+import { CURRENCIES, currencyOf, formatMoney, nativeView } from '@/lib/currency'
 import { formatCLP } from '@/lib/format'
 import { ACCOUNT_TYPES } from '@/lib/icons'
 import { useAnimatedNumber } from '@/lib/motion'
@@ -50,11 +51,16 @@ function Detail({ debt: a }: { debt: AccountWithBalance }) {
     () => listTransactions({ from: '1900-01-01', to: '2999-12-31', accountId: a.id }, 300),
     [a.id], ['transactions'],
   )
+  const { rates } = useRefData()
   const isLoan = a.type === 'loan'
-  const loan = loanStatus(a)
-  const recv = receivableStatus(a)
+  // Deuda en UF/USD: todo en su moneda (lo pagado, convertido al valor de hoy).
+  const cur = currencyOf(a)
+  const view = nativeView(a, rates)
+  const loan = loanStatus(view)
+  const recv = receivableStatus(view)
   const amount = isLoan ? loan.debt : recv.owed
   const shown = useAnimatedNumber(amount)
+  const money = (v: number) => formatMoney(v, cur)
   const pct = isLoan ? loan.pct : recv.collected > 0 ? recv.pct : null
 
   async function toggleArchive() {
@@ -68,14 +74,15 @@ function Detail({ debt: a }: { debt: AccountWithBalance }) {
 
   const facts: [string, ReactNode][] = []
   if (isLoan) {
-    facts.push(['Pagado aquí', formatCLP(loan.paid)])
+    facts.push(['Pagado aquí', cur === 'CLP' ? formatCLP(loan.paid) : `${formatCLP(a.inflow)} (≈ ${money(loan.paid)})`])
     if (loan.installments) facts.push(['Cuotas', `${loan.installments.paid} de ${loan.installments.total}`])
-    if (a.loan_installment) facts.push(['Cuota', formatCLP(a.loan_installment)])
+    if (a.loan_installment) facts.push(['Cuota', money(Number(a.loan_installment))])
     if (a.payment_day) facts.push(['Día de pago', `${a.payment_day} de cada mes`])
     if (a.interest_rate != null) facts.push(['Tasa anual', `${String(a.interest_rate).replace('.', ',')}%`])
-    if (a.loan_amount) facts.push(['Monto que pediste', formatCLP(a.loan_amount)])
+    if (a.loan_amount) facts.push(['Monto que pediste', money(Number(a.loan_amount))])
+    if (cur !== 'CLP') facts.push(['Moneda', CURRENCIES[cur].label])
   } else {
-    facts.push(['Te han devuelto', formatCLP(recv.collected)], ['Prestado en total', formatCLP(recv.collected + recv.owed)])
+    facts.push(['Te han devuelto', money(recv.collected)], ['Prestado en total', money(recv.collected + recv.owed)])
   }
 
   return (
@@ -98,7 +105,9 @@ function Detail({ debt: a }: { debt: AccountWithBalance }) {
         <div>
           <p className="label-caps">{isLoan ? 'Debes' : 'Te deben'}</p>
           <p className={`figure-hero mt-1 text-[2.25rem] leading-none md:text-[2.75rem] ${amount > 0 ? (isLoan ? 'text-neg' : 'text-pos') : ''}`}>
-            <span className="sr-only">{formatCLP(amount)}</span><span aria-hidden>{formatCLP(shown)}</span>
+            {cur === 'CLP'
+              ? <><span className="sr-only">{formatCLP(amount)}</span><span aria-hidden>{formatCLP(shown)}</span></>
+              : money(amount)}
           </p>
         </div>
         {pct != null && (
@@ -106,7 +115,7 @@ function Detail({ debt: a }: { debt: AccountWithBalance }) {
             <ProgressBar thick pct={pct} label={`${pct}% ${isLoan ? 'pagado' : 'devuelto'}`} barClass="bg-pos-bar" />
             {amount === 0
               ? <Done>{isLoan ? 'Pagada' : 'Te pagaron todo'}</Done>
-              : <p className="text-sm text-soft">{isLoan ? loanDetails(a) || `${pct}% pagado` : `${pct}% devuelto`}</p>}
+              : <p className="text-sm text-soft">{isLoan ? loanDetails(a, rates) || `${pct}% pagado` : `${pct}% devuelto`}</p>}
           </div>
         )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4 sm:grid-cols-3">

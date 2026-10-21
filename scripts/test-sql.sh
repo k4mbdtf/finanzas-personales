@@ -6,14 +6,15 @@
 #        -> 0005 (sobre esos datos) -> pruebas de la Etapa 2 -> más datos "existentes"
 #        -> 0006 (sobre esos datos) -> pruebas de deudas, bancos e inversiones
 #        -> 0007 -> pruebas de reglas de categorización -> 0008 -> pruebas de dividir movimientos
-#        -> 0009 -> pruebas de multimoneda.
+#        -> 0009 -> pruebas de multimoneda -> 0010 -> pruebas de deudas en UF/USD y patrimonio.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 IMAGE="${PG_IMAGE:-postgres:17-alpine}"
 NAME="finanzas-pg-test-$$"
 
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+# KEEP_DB=1 npm run test:sql deja el contenedor vivo para revisarlo (docker exec -it ... psql -U postgres).
+cleanup() { [ -n "${KEEP_DB:-}" ] || docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 docker run -d --name "$NAME" -e POSTGRES_PASSWORD=postgres "$IMAGE" >/dev/null
@@ -44,3 +45,5 @@ run supabase/migrations/0008_dividir.sql
 run supabase/tests/50_dividir.sql
 run supabase/migrations/0009_multimoneda.sql
 run supabase/tests/60_multimoneda.sql
+run supabase/migrations/0010_deudas_multimoneda.sql
+run supabase/tests/70_deudas_multimoneda.sql
