@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  balanceCLP, convertAmount, formatMoney, fromCLP, nativeBalance, needsRate, needsToValue, parseMoney, rateLabel, toCLP, txAmounts,
+  balanceCLP, convertAmount, formatMoney, fromCLP, nativeBalance, nativeView, needsRate, needsToValue, parseMoney, rateLabel, toCLP, txAmounts,
 } from './currency.ts'
 
 test('formato de cada moneda', () => {
@@ -89,4 +89,11 @@ test('convertir para precompletar', () => {
   assert.equal(convertAmount(100, 'USD', 'UF', rates), 2.41)
   assert.equal(convertAmount(100, 'USD', 'UF', {}), null)
   assert.equal(convertAmount(7, 'UF', 'UF', {}), 7)
+})
+
+test('vista en la moneda de la cuenta: saldo nativo y lo pagado convertido al valor de hoy', () => {
+  const loan = { currency: 'UF' as const, balance: -3350000, balance_native: -84.75, inflow: 600000, outflow: 3950000 }
+  assert.deepEqual(nativeView(loan, { UF: 40000 }), { ...loan, balance: -84.75, inflow: 15, outflow: 98.75 })
+  const clp = { balance: -100, inflow: 1, outflow: 2 }
+  assert.equal(nativeView(clp, { UF: 40000 }), clp)
 })

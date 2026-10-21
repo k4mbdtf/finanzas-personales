@@ -34,8 +34,9 @@ export default function AccountsPage() {
   const shownTotal = useAnimatedNumber(total)
   const totalInView = money.viewCurrency === 'CLP' ? null : money.view(total)
   const activeDebts = debts.filter((a) => !a.archived)
-  const owe = activeDebts.filter((a) => a.type === 'loan').reduce((s, a) => s + debtOf(a), 0)
-  const owed = activeDebts.filter((a) => a.type === 'receivable').reduce((s, a) => s + Math.max(0, a.balance), 0)
+  // Deudas en UF/USD: en pesos al valor de hoy.
+  const owe = activeDebts.filter((a) => a.type === 'loan').reduce((s, a) => s + debtOf({ balance: money.clp(a) }), 0)
+  const owed = activeDebts.filter((a) => a.type === 'receivable').reduce((s, a) => s + Math.max(0, money.clp(a)), 0)
   const activeInvestments = investments.filter((a) => !a.archived)
   const invested = activeInvestments.reduce((s, a) => s + (status.data?.get(a.id)?.current_value ?? a.balance), 0)
 

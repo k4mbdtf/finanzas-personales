@@ -11,7 +11,7 @@ import { updateAccount } from '@/data/accounts'
 import { listPlans, type PlanWithStatus } from '@/data/installments'
 import { useQuery } from '@/hooks/useQuery'
 import { useMoney } from '@/hooks/useMoney'
-import { currencyOf, formatMoney, nativeBalance, type Currency } from '@/lib/currency'
+import { currencyOf, formatMoney, nativeBalance, nativeView, type Currency } from '@/lib/currency'
 import { cardStatus, debtOf, loanStatus, receivableStatus } from '@/lib/debt'
 import { formatCLP, formatDate } from '@/lib/format'
 import { useAnimatedNumber } from '@/lib/motion'
@@ -48,7 +48,7 @@ export default function DebtsPage() {
   const cards = accounts.filter((a) => a.type === 'credit_card' && !a.archived)
   // Tarjetas en UF/USD: su deuda en pesos de hoy.
   const owe = [...loans, ...cards].reduce((s, a) => s + debtOf({ balance: money.clp(a) }), 0)
-  const owed = receivables.reduce((s, a) => s + Math.max(0, a.balance), 0)
+  const owed = receivables.reduce((s, a) => s + Math.max(0, money.clp(a)), 0)
   const shownOwe = useAnimatedNumber(owe)
   const shownOwed = useAnimatedNumber(owed)
 
@@ -97,16 +97,16 @@ export default function DebtsPage() {
         </EmptyState>
       )}>
         {loans.map((a) => {
-          const s = loanStatus(a)
+          const s = loanStatus(nativeView(a, money.rates))
           return (
             <Item key={a.id} account={a}
               subtitle={[a.counterparty, a.interest_rate != null && `${String(a.interest_rate).replace('.', ',')}% anual`].filter(Boolean).join(' · ')}
-              amountLabel="Debes" amount={s.debt} amountClass={s.debt > 0 ? 'text-neg' : ''}
+              amountLabel="Debes" amount={s.debt} currency={currencyOf(a)} amountClass={s.debt > 0 ? 'text-neg' : ''}
               action={s.debt > 0
                 ? <Button size="sm" onClick={() => actions.pay(a)}>Pagar</Button>
                 : <Button size="sm" variant="secondary" icon={Archive} onClick={() => archive(a)}>Archivar</Button>}>
               {s.pct != null && <ProgressBar pct={s.pct} label={`${a.name}: ${s.pct}% pagado`} barClass="bg-pos-bar" />}
-              {s.debt === 0 ? <Done>Pagada</Done> : <p className="text-xs leading-relaxed text-muted">{loanDetails(a) || 'Aún no registras pagos'}</p>}
+              {s.debt === 0 ? <Done>Pagada</Done> : <p className="text-xs leading-relaxed text-muted">{loanDetails(a, money.rates) || 'Aún no registras pagos'}</p>}
             </Item>
           )
         })}
@@ -182,10 +182,11 @@ export default function DebtsPage() {
           <p className="text-sm text-soft">Si le prestaste dinero a alguien, anótalo aquí para no olvidarlo.</p>
         )}>
         {receivables.map((a) => {
-          const s = receivableStatus(a)
+          const cur = currencyOf(a)
+          const s = receivableStatus(nativeView(a, money.rates))
           return (
             <Item key={a.id} account={a} subtitle={a.counterparty ?? ''}
-              amountLabel="Te deben" amount={s.owed} amountClass={s.owed > 0 ? 'text-pos' : ''}
+              amountLabel="Te deben" amount={s.owed} currency={cur} amountClass={s.owed > 0 ? 'text-pos' : ''}
               action={s.owed > 0
                 ? <>
                   <Button size="sm" variant="secondary" onClick={() => actions.lendMore(a)}>Prestar más</Button>
@@ -197,7 +198,7 @@ export default function DebtsPage() {
               )}
               {s.owed === 0
                 ? <Done>Te pagaron todo</Done>
-                : s.collected > 0 && <p className="text-xs text-muted">Te han devuelto {formatCLP(s.collected)} de {formatCLP(s.collected + s.owed)}</p>}
+                : s.collected > 0 && <p className="text-xs text-muted">Te han devuelto {formatMoney(s.collected, cur)} de {formatMoney(s.collected + s.owed, cur)}</p>}
             </Item>
           )
         })}

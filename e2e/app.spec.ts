@@ -334,7 +334,7 @@ test.describe('UF y dólares', () => {
     await page.getByRole('button', { name: 'Nueva cuenta' }).first().click()
     const dialog = page.getByRole('dialog', { name: 'Nueva cuenta' })
     await dialog.getByText('Efectivo', { exact: true }).click()
-    await dialog.getByRole('radio', { name: 'Dólares' }).check({ force: true })
+    await dialog.getByText('Dólares', { exact: true }).click()
     await dialog.getByLabel('Nombre').fill('Dólares en efectivo')
     await dialog.getByLabel('Saldo actual (US$)').fill('1.000')
     await expect(dialog.getByText('1 USD = $950')).toBeVisible()
@@ -348,7 +348,7 @@ test.describe('UF y dólares', () => {
     // Total en pesos de hoy: 100.000 + 950.000.
     await expect(page.getByText('$1.050.000').first()).toBeVisible()
 
-    await page.getByRole('radio', { name: 'Dólares' }).check({ force: true })
+    await page.getByText('Dólares', { exact: true }).click()
     await expect(page.getByText('US$1.105,26').first()).toBeVisible()
   })
 
@@ -386,7 +386,8 @@ test.describe('UF y dólares', () => {
       await page.goto('/#/movimientos')
       await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
       const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
-      await dialog.getByRole('radio', { name: 'Transferencia' }).check({ force: true })
+      await expect(dialog).toBeVisible()
+      await dialog.getByText('Transferencia', { exact: true }).click()
       await dialog.getByLabel('Desde').selectOption({ label: 'Cuenta USD' })
       await dialog.getByLabel('Hacia').selectOption({ label: 'Cuenta RUT' })
       await dialog.getByLabel('Monto que sale (US$)').fill('100')
@@ -417,5 +418,62 @@ test.describe('UF y dólares', () => {
       await expect.poll(() => db.tables.exchange_rates?.length ?? 0).toBe(1)
       expect(db.tables.exchange_rates[0]).toMatchObject({ currency: 'USD', clp: 1000 })
     })
+  })
+})
+
+test.describe('deudas en UF', () => {
+  test('crédito en UF con el dinero que llegó, y pagar la cuota en pesos', async ({ page }) => {
+    const db = new FakeSupabase({
+      profiles: [{ user_id: USER.id, multi_currency: true }],
+      accounts: [account('Cuenta RUT', 100000, { id: 'rut' })],
+    })
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/deudas')
+    await page.getByRole('button', { name: 'Nueva deuda' }).first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Nombre').fill('Hipotecario')
+    await dialog.getByText('UF', { exact: true }).click()
+    await dialog.getByLabel('Valor de la cuota (UF)').fill('15,25')
+    await dialog.getByLabel('Total de cuotas').fill('240')
+    await dialog.getByLabel('¿Cuántas cuotas ya pagaste?').fill('40')
+    await expect(dialog.getByText('UF 3.050,00')).toBeVisible()
+    await dialog.getByText('¿El dinero llegó a una de tus cuentas?').click()
+    await dialog.getByLabel('Cuenta donde llegó').selectOption({ label: 'Cuenta RUT' })
+    // 3.050 UF × $39.500 = $120.475.000, precompletado en pesos.
+    await expect(dialog.getByLabel('Monto recibido (pesos)')).toHaveValue('$120.475.000')
+    await dialog.getByRole('button', { name: 'Guardar deuda' }).click()
+    await expect(dialog).toBeHidden()
+
+    expect(db.tables.accounts[1]).toMatchObject({
+      name: 'Hipotecario', type: 'loan', currency: 'UF', initial_balance: 0, initial_balance_native: 0, loan_installment: 15.25,
+    })
+    expect(db.tables.transactions).toMatchObject([
+      { type: 'transfer', account_id: db.tables.accounts[1].id, to_account_id: 'rut', amount: 120475000, amount_native: 3050 },
+    ])
+    const loan = page.getByRole('listitem').filter({ hasText: 'Hipotecario' })
+    await expect(loan).toContainText('UF 3.050,00')
+    await expect(loan).toContainText('Cuota 40 de 240')
+
+    await loan.getByRole('button', { name: 'Pagar' }).click()
+    const pay = page.getByRole('dialog', { name: 'Registrar pago' })
+    await expect(pay.getByLabel('Llega a Hipotecario (UF)')).toHaveValue('15,25')
+    await expect(pay.getByLabel('Monto que sale')).toHaveValue('$602.375')
+    await pay.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await expect(pay).toBeHidden()
+    expect(db.tables.transactions[1]).toMatchObject({ type: 'transfer', account_id: 'rut', amount: 602375, to_amount_native: 15.25 })
+    await expect(loan).toContainText('UF 3.034,75')
+  })
+
+  test('patrimonio: trae el valor de fin de cada mes de las monedas en uso', async ({ page }) => {
+    const db = new FakeSupabase({
+      profiles: [{ user_id: USER.id, multi_currency: true }],
+      accounts: [account('Hipotecario', -3950000, { type: 'loan', currency: 'UF', initial_balance_native: -100 })],
+    })
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/patrimonio')
+    await expect.poll(() => (db.tables.exchange_rates ?? []).filter((r) => r.currency === 'UF').length).toBeGreaterThanOrEqual(12)
+    // Y recién después consulta el patrimonio.
+    await expect.poll(() => db.requests.some((r) => r.path.startsWith('/rest/v1/rpc/net_worth_by_month'))).toBe(true)
   })
 })

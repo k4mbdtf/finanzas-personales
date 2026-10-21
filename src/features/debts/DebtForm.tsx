@@ -9,14 +9,18 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
-import { inPesos } from '@/lib/currency'
+import { CURRENCIES, currencyOf, formatMoney, inPesos, nativeBalance, toCLP, type Currency } from '@/lib/currency'
 import { createTrackedAccount, deleteAccount, updateAccount } from '@/data/accounts'
+import { getRate, saveRate } from '@/data/rates'
+import { useQuery } from '@/hooks/useQuery'
 import { debtOf, remainingFromInstallments } from '@/lib/debt'
 import { AppError } from '@/lib/errors'
-import { formatCLP, todayISO } from '@/lib/format'
+import { todayISO } from '@/lib/format'
 import { COLORS } from '@/lib/icons'
 import { INSTITUTIONS, findInstitution } from '@/lib/institutions'
 import { AmountInput } from '@/components/AmountInput'
+import { MoneyInput } from '@/components/MoneyInput'
+import { RateField } from '@/components/RateField'
 import { useConfirm, useToast } from '@/components/Feedback'
 import { ColorPicker } from '@/components/Pickers'
 import { Alert, Button, Checkbox, Field, Segmented, Select } from '@/components/ui'
@@ -39,10 +43,18 @@ const digits = (v: string, max: number) => v.replace(/\D/g, '').slice(0, max)
 export function DebtForm({
   debt, defaultKind = 'loan', onDone, onDeleted,
 }: { debt?: AccountWithBalance; defaultKind?: DebtKind; onDone: () => void; onDeleted?: () => void }) {
-  const { accounts } = useRefData()
+  const { accounts, multiCurrency } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
   const editing = !!debt
+  // Moneda (con "Usar UF y dólares"): se elige al crear. En UF/USD los montos van en esa moneda.
+  const [currency, setCurrency] = useState<Currency>(debt ? currencyOf(debt) : 'CLP')
+  const foreign = currency !== 'CLP'
+  const today = todayISO()
+  const rateQ = useQuery(() => (currency !== 'CLP' ? getRate(currency, today) : Promise.resolve(null)), [currency, today])
+  const [rateOverride, setRateOverride] = useState<number | null>(null)
+  const [editingRate, setEditingRate] = useState(false)
+  const fx = rateOverride ?? rateQ.data ?? null
 
   const [kind, setKind] = useState<DebtKind>((debt?.type as DebtKind | undefined) ?? defaultKind)
   const isLoan = kind === 'loan'
@@ -52,9 +64,9 @@ export function DebtForm({
   const [cuota, setCuota] = useState<number | null>(debt?.loan_installment ?? null)
   const [countText, setCountText] = useState(debt?.loan_installments_count?.toString() ?? '')
   const [paidBeforeText, setPaidBeforeText] = useState('0')
-  const [amount, setAmount] = useState<number | null>(
-    debt ? (debt.type === 'loan' ? debtOf(debt) : Math.max(0, debt.balance)) : null,
-  )
+  // Lo que se debe hoy, en la moneda de la deuda.
+  const owedNow = (d: AccountWithBalance) => (d.type === 'loan' ? debtOf({ balance: nativeBalance(d) }) : Math.max(0, nativeBalance(d)))
+  const [amount, setAmount] = useState<number | null>(debt ? owedNow(debt) : null)
   const [loanAmount, setLoanAmount] = useState<number | null>(debt?.loan_amount ?? null)
   const [paymentDay, setPaymentDay] = useState(debt?.payment_day?.toString() ?? '')
   const [rate, setRate] = useState(debt?.interest_rate != null ? String(debt.interest_rate).replace('.', ',') : '')
@@ -92,8 +104,9 @@ export function DebtForm({
     paymentDay: paymentDay && (+paymentDay < 1 || +paymentDay > 31) ? 'Debe ser un día entre 1 y 31.' : '',
     rate: Number.isNaN(parseRate(rate)) ? 'Ingresa un porcentaje válido (ej: 18,5).' : '',
     cashAmount: cashAccountId && !cashAmount ? 'Ingresa el monto.' : '',
+    fx: foreign && !fx ? `Ingresa el valor de 1 ${currency} hoy.` : '',
     date: cashAccountId && !/^\d{4}-\d{2}-\d{2}$/.test(date) ? 'Ingresa una fecha válida.' : '',
-  }), [isLoan, name, counterparty, byInstallments, cuota, count, countText, paidBefore, amount, editing, paymentDay, rate, cashAccountId, cashAmount, date])
+  }), [isLoan, name, counterparty, byInstallments, cuota, count, countText, paidBefore, amount, editing, paymentDay, rate, cashAccountId, cashAmount, date, foreign, fx, currency])
   const show = (k: keyof typeof errors) => (submitted ? errors[k] : '')
 
   function changeCounterparty(v: string) {
@@ -125,28 +138,42 @@ export function DebtForm({
       interest_rate: isLoan ? parseRate(rate) : null,
       payment_day: isLoan && paymentDay ? +paymentDay : null,
     }
+    // En UF/USD el saldo inicial se guarda en esa moneda y, en pesos, al valor de hoy.
+    const inPesosToday = (v: number) => (foreign ? toCLP(v, fx!) : v)
     try {
       if (debt) {
         // "Lo que debes hoy" mueve el punto de partida; los pagos registrados no cambian.
-        const current = debt.type === 'loan' ? debtOf(debt) : Math.max(0, debt.balance)
+        const current = owedNow(debt)
         const next = amount ?? 0
-        const initial = debt.type === 'loan' ? debt.initial_balance + current - next : debt.initial_balance + next - current
-        await updateAccount(debt.id, { ...common, ...loanFields, initial_balance: initial, archived } satisfies Partial<AccountInput>)
+        const delta = debt.type === 'loan' ? current - next : next - current
+        await updateAccount(debt.id, {
+          ...common, ...loanFields, archived,
+          initial_balance: debt.initial_balance + inPesosToday(delta),
+          ...(foreign && { initial_balance_native: Number(debt.initial_balance_native ?? 0) + delta }),
+        } satisfies Partial<AccountInput>)
         toast('Cambios guardados')
       } else {
         const total = owedToday ?? 0
         const moved = cashAccountId ? cashAmount ?? 0 : 0
+        // El dinero que se movió (en pesos), en la moneda de la deuda.
+        const movedNative = foreign ? Math.round((moved / fx!) * 100) / 100 : moved
         // Con movimiento inicial, ese monto ya entra al saldo por la transferencia.
-        const initial = isLoan ? -(total - moved) : total - moved
+        const initial = isLoan ? -(total - movedNative) : total - movedNative
         await createTrackedAccount(
-          { ...common, ...loanFields, type: kind, initial_balance: initial },
-          { cashAccountId: cashAccountId || null, cashAmount: moved || null, date },
+          {
+            ...common, ...loanFields, type: kind, initial_balance: inPesosToday(initial),
+            ...(foreign && { currency, initial_balance_native: initial }),
+          },
+          { cashAccountId: cashAccountId || null, cashAmount: moved || null, date, native: foreign && moved ? movedNative : null },
         )
         toast(isLoan ? 'Deuda guardada' : 'Préstamo guardado')
       }
+      if (currency !== 'CLP' && rateOverride && editingRate) void saveRate(currency, today, rateOverride).catch(() => {})
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar.')
+      setError(foreign && err instanceof AppError && (err.code === '23514' || err.code === 'PGRST202')
+        ? 'Para deudas en UF o dólares, ejecuta supabase/migrations/0010_deudas_multimoneda.sql en el SQL Editor de Supabase.'
+        : err instanceof Error ? err.message : 'No se pudo guardar.')
       setBusy(false)
     }
   }
@@ -201,6 +228,13 @@ export function DebtForm({
         </>
       )}
 
+      {multiCurrency && !editing && (
+        <Segmented<Currency> label="Moneda de la deuda" value={currency}
+          onChange={(c) => { setCurrency(c); setCuota(null); setAmount(null); setLoanAmount(null); setCashAmount(null); setRateOverride(null); setEditingRate(false) }}
+          options={(Object.keys(CURRENCIES) as Currency[]).map((c) => ({ value: c, label: CURRENCIES[c].label }))} />
+      )}
+      {editing && foreign && <p className="text-sm text-muted">Deuda en {CURRENCIES[currency].name} (la moneda no se cambia).</p>}
+
       {isLoan && !editing && (
         <Segmented<Mode> label="¿Cómo la pagas?" value={mode} onChange={setMode}
           options={[{ value: 'installments', label: 'En cuotas' }, { value: 'total', label: 'Monto total' }]} />
@@ -209,7 +243,7 @@ export function DebtForm({
       {byInstallments ? (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <AmountInput label="Valor de la cuota" value={cuota} onChange={setCuota} error={show('cuota')} />
+            <MoneyInput currency={currency} label="Valor de la cuota" value={cuota} onChange={setCuota} error={show('cuota')} />
             <Field label="Total de cuotas" inputMode="numeric" placeholder="Ej: 24" value={countText}
               error={show('count')} onChange={(e) => setCountText(digits(e.target.value, 3))} />
           </div>
@@ -218,12 +252,12 @@ export function DebtForm({
             hint="Las que pagaste antes de registrarla aquí." />
           {owedToday != null && owedToday > 0 && (
             <p className="rounded-sm bg-subtle px-3.5 py-3 text-sm">
-              Te quedan <strong>{count - paidBefore} cuotas</strong>: debes <strong className="tabular-nums">{formatCLP(owedToday)}</strong>.
+              Te quedan <strong>{count - paidBefore} cuotas</strong>: debes <strong className="tabular-nums">{formatMoney(owedToday, currency)}</strong>.
             </p>
           )}
         </>
       ) : (
-        <AmountInput label={isLoan ? (editing ? 'Lo que debes hoy' : '¿Cuánto debes hoy?') : (editing ? 'Lo que te deben hoy' : '¿Cuánto te debe?')}
+        <MoneyInput currency={currency} label={isLoan ? (editing ? 'Lo que debes hoy' : '¿Cuánto debes hoy?') : (editing ? 'Lo que te deben hoy' : '¿Cuánto te debe?')}
           value={amount} onChange={setAmount} error={show('amount')}
           hint={editing ? 'Corrige el saldo sin borrar los pagos registrados.' : undefined} />
       )}
@@ -232,7 +266,7 @@ export function DebtForm({
         <>
           {editing && (
             <div className="grid grid-cols-2 gap-3">
-              <AmountInput label="Valor de la cuota (opcional)" value={cuota} onChange={setCuota} />
+              <MoneyInput currency={currency} label="Valor de la cuota (opcional)" value={cuota} onChange={setCuota} />
               <Field label="Total de cuotas (opcional)" inputMode="numeric" placeholder="Ej: 24" value={countText}
                 error={show('count')} onChange={(e) => setCountText(digits(e.target.value, 3))} />
             </div>
@@ -243,9 +277,17 @@ export function DebtForm({
             <Field label="Tasa anual % (opcional)" inputMode="decimal" placeholder="Ej: 18,5" value={rate}
               error={show('rate')} onChange={(e) => setRate(e.target.value.replace(/[^\d,.]/g, '').slice(0, 7))} />
           </div>
-          <AmountInput label="Monto que pediste (opcional)" value={loanAmount} onChange={setLoanAmount}
+          <MoneyInput currency={currency} label="Monto que pediste (opcional)" value={loanAmount} onChange={setLoanAmount}
             hint="Solo informativo: el avance se calcula con lo que debes y lo que pagas." />
         </>
+      )}
+
+      {currency !== 'CLP' && (
+        <RateField currency={currency} date={today} rate={fx} loading={rateQ.loading}
+          editing={editingRate || (!fx && !rateQ.loading)} error={show('fx')}
+          clp={owedToday != null && fx ? toCLP(owedToday, fx) : null}
+          onEdit={() => { setEditingRate(true); setRateOverride(fx) }}
+          onChange={(v) => { setRateOverride(v); setEditingRate(true) }} />
       )}
 
       {!editing && (
@@ -265,14 +307,16 @@ export function DebtForm({
             <Select label={isLoan ? 'Cuenta donde llegó' : 'Cuenta de donde salió'} value={cashAccountId}
               onChange={(e) => {
                 setCashAccountId(e.target.value)
-                if (e.target.value && cashAmount == null) setCashAmount(isLoan ? loanAmount ?? owedToday : owedToday)
+                // En UF/USD, el monto en pesos al valor de hoy.
+                const base = isLoan ? loanAmount ?? owedToday : owedToday
+                if (e.target.value && cashAmount == null && base != null) setCashAmount(foreign ? (fx ? toCLP(base, fx) : null) : base)
               }}>
               <option value="">{isLoan ? 'No (solo anotar la deuda)' : 'No (solo anotarlo)'}</option>
               {usable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
             {cashAccountId && (
               <div className="grid grid-cols-2 gap-3">
-                <AmountInput label={isLoan ? 'Monto recibido' : 'Monto prestado'} value={cashAmount}
+                <AmountInput label={`${isLoan ? 'Monto recibido' : 'Monto prestado'}${foreign ? ' (pesos)' : ''}`} value={cashAmount}
                   onChange={setCashAmount} error={show('cashAmount')} />
                 <Field label="Fecha" type="date" value={date} max="2100-12-31" error={show('date')}
                   onChange={(e) => setDate(e.target.value)} />

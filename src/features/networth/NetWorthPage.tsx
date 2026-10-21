@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChartLine } from 'lucide-react'
+import { useRefData } from '@/context/RefData'
 import { netWorthByMonth, type NetWorthPoint } from '@/data/netWorth'
+import { currencyOf, type ForeignCurrency } from '@/lib/currency'
 import { useQuery } from '@/hooks/useQuery'
 import { useChartTheme } from '@/lib/chartTheme'
 import { currentMonth, monthLabel, monthShort } from '@/lib/dates'
@@ -18,7 +20,14 @@ export default function NetWorthPage() {
   const reduced = useReducedMotion()
   const [range, setRange] = useState<Range>('12')
   const [asTable, setAsTable] = useState(false)
-  const q = useQuery(() => netWorthByMonth(currentMonth(), Number(range)), [range], ['transactions', 'accounts'])
+  // Monedas extranjeras en uso: el patrimonio las valora a fin de cada mes.
+  const { accounts, debts } = useRefData()
+  const currencies = [...new Set([...accounts, ...debts].map(currencyOf).filter((c): c is ForeignCurrency => c !== 'CLP'))].sort()
+  const currenciesKey = currencies.join(',')
+  const q = useQuery(
+    () => netWorthByMonth(currentMonth(), Number(range), currenciesKey ? currenciesKey.split(',') as ForeignCurrency[] : []),
+    [range, currenciesKey], ['transactions', 'accounts', 'rates'],
+  )
 
   const data = q.data ?? []
   const last = data[data.length - 1]

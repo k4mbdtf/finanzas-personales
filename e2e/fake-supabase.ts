@@ -228,6 +228,25 @@ export class FakeSupabase {
     switch (fn) {
       case 'materialize_recurring':
         return 0
+      case 'create_tracked_account': {
+        // Igual que public.create_tracked_account (0010): la deuda y, si corresponde, el movimiento inicial.
+        const a = args.p_account as Row
+        const currency = (a.currency as string | undefined) ?? 'CLP'
+        const acc = this.insert('accounts', {
+          ...account(String(a.name), Number(a.initial_balance ?? 0)), ...a, currency,
+          initial_balance_native: currency === 'CLP' ? null : a.initial_balance_native ?? 0,
+        })
+        if (args.p_cash_account) {
+          const loan = a.type === 'loan'
+          const native = currency === 'CLP' ? {} : loan ? { amount_native: args.p_native } : { to_amount_native: args.p_native }
+          this.insert('transactions', {
+            type: 'transfer', amount: args.p_cash_amount, date: args.p_date, ...native,
+            account_id: loan ? acc.id : args.p_cash_account, to_account_id: loan ? args.p_cash_account : acc.id,
+            note: `${loan ? 'Préstamo recibido: ' : 'Préstamo: '}${a.name}`,
+          })
+        }
+        return acc.id
+      }
       case 'save_split': {
         // Igual que public.save_split (0008): el ancla conserva su id; las demás partes se reemplazan.
         const parts = args.p_parts as { category_id: string; amount: number }[]

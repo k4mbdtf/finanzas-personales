@@ -53,6 +53,8 @@ export type OpeningMove = {
   date?: string
   /** Solo inversiones: valor actual en esa fecha. */
   value?: number | null
+  /** Deuda en UF/USD: el movimiento inicial en esa moneda (cashAmount va en pesos). Migración 0010. */
+  native?: number | null
 }
 
 /** Crea una deuda, un "me deben" o una inversión con su movimiento inicial (atómico, en la BD). */
@@ -63,6 +65,8 @@ export async function createTrackedAccount(input: Partial<AccountInput> & Pick<A
     p_cash_amount: move.cashAccountId ? move.cashAmount ?? null : null,
     p_date: move.date ?? null,
     p_value: move.value ?? null,
+    // Solo si hay monto en otra moneda: sin la migración 0010 la función no tiene este parámetro.
+    ...(move.cashAccountId && move.native != null && { p_native: move.native }),
   }))
   emitChange('accounts', 'transactions', 'investments')
   return id

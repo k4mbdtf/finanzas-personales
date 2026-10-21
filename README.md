@@ -37,6 +37,7 @@ supabase/migrations/
   0007_reglas.sql               Reglas de categorización (texto → categoría)
   0008_dividir.sql              Dividir un movimiento en varias categorías (split_group + save_split)
   0009_multimoneda.sql          Cuentas en UF o dólares (opcional): montos en su moneda y valores del día
+  0010_deudas_multimoneda.sql   Deudas en UF/USD y patrimonio al valor de fin de cada mes
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 e2e/                     Pruebas de punta a punta (Playwright) con Supabase simulado (fake-supabase.ts)
 supabase/email-templates/ Correos de confirmación y recuperación en español
@@ -253,11 +254,17 @@ Apagada, la app se ve igual que siempre, solo en pesos. Activada:
 - Los valores de la UF y el dólar (observado) vienen de [mindicador.cl](https://mindicador.cl) y se
   guardan en `exchange_rates`. Si no se pueden obtener (sin conexión, o si el navegador bloquea la
   consulta), el formulario pide el valor y también se guarda. Siempre se puede corregir ("Cambiar").
+- **Deudas en UF/USD** (requiere también la migración 0010): un préstamo (p. ej. un crédito
+  hipotecario en UF) o un "me deben" se crea en su moneda, con la cuota y el monto con decimales. El
+  dinero que llegó a tu cuenta se registra en pesos (precompletado al valor de hoy). **Pagar**
+  precompleta la cuota en UF y calcula los pesos; lo pagado se muestra también convertido.
 - La moneda de una cuenta no cambia después de crearla. Por ahora los recurrentes, las compras en
-  cuotas, las cartolas importadas, las metas y los movimientos iniciales de deudas e inversiones son
-  solo en cuentas en pesos (la BD lo valida), y las deudas e inversiones son en pesos.
-- El saldo de hoy de una cuenta en UF/USD (en Inicio, Cuentas y Deudas) usa el valor de hoy; el
-  patrimonio histórico la cuenta con los pesos de cada movimiento.
+  cuotas, las cartolas importadas, las metas y los movimientos iniciales de deudas e inversiones se
+  hacen desde cuentas en pesos (la BD lo valida), y las inversiones son en pesos.
+- El saldo de hoy de una cuenta o deuda en UF/USD (en Inicio, Cuentas y Deudas) usa el valor de hoy.
+  El **patrimonio** la valora con el valor de fin de cada mes: antes de consultarlo, la app guarda en
+  `exchange_rates` el valor de fin de mes que falte (`net_worth_by_month` usa el último valor
+  guardado hasta esa fecha; sin ninguno, los pesos de sus movimientos).
 - Diseño en `supabase/migrations/0009_multimoneda.sql` y lógica en `src/lib/currency.ts` (+ pruebas).
 
 **Ajustes** (`/#/ajustes`): tema (Sistema / Claro / Oscuro), UF y dólares, instalar la app, **exportar mis datos**
