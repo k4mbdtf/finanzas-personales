@@ -7,6 +7,7 @@
 import { useState, type FormEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { createTrackedAccount, deleteAccount, updateAccount } from '@/data/accounts'
 import { AppError } from '@/lib/errors'
 import { todayISO } from '@/lib/format'
@@ -45,7 +46,8 @@ export function InvestmentForm({ investment, onDone, onDeleted }: {
   const [busy, setBusy] = useState(false)
 
   const institution = findInstitution(platform)
-  const usable = accounts.filter((a) => !a.archived)
+  // El aporte inicial es en pesos.
+  const usable = accounts.filter((a) => !a.archived && inPesos(a))
 
   const errors = {
     name: !name.trim() ? 'Ponle un nombre a la inversión.' : '',

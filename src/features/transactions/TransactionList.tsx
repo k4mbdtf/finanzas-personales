@@ -1,6 +1,7 @@
 // Lista de movimientos agrupada por día. Se reutiliza en Inicio (últimos movimientos).
 import { CreditCard, HandCoins, Repeat, Split, TrendingUp, type LucideIcon } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { currencyOf, formatMoney } from '@/lib/currency'
 import { dayLabel } from '@/lib/dates'
 import { formatCLP } from '@/lib/format'
 import { TRANSFER_LABEL, transferKind, type TransferKind } from '@/lib/accounts'
@@ -92,7 +93,8 @@ function Row({ tx, onSelect }: { tx: Transaction; onSelect: (tx: Transaction) =>
         </span>
         <span className={`shrink-0 text-[0.9375rem] font-semibold tabular-nums ${style.cls}`}>
           <span className="sr-only">{style.label}: </span>
-          {style.sign}{formatCLP(tx.amount)}
+          {/* Cuenta en UF/USD: el monto en su moneda. */}
+          {style.sign}{tx.amount_native != null ? formatMoney(Number(tx.amount_native), currencyOf(fromAcc ?? {})) : formatCLP(tx.amount)}
         </span>
       </button>
     </li>

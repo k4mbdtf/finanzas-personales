@@ -10,6 +10,8 @@ import { useRefData } from '@/context/RefData'
 import { updateAccount } from '@/data/accounts'
 import { listPlans, type PlanWithStatus } from '@/data/installments'
 import { useQuery } from '@/hooks/useQuery'
+import { useMoney } from '@/hooks/useMoney'
+import { currencyOf, formatMoney, nativeBalance, type Currency } from '@/lib/currency'
 import { cardStatus, debtOf, loanStatus, receivableStatus } from '@/lib/debt'
 import { formatCLP, formatDate } from '@/lib/format'
 import { useAnimatedNumber } from '@/lib/motion'
@@ -33,6 +35,7 @@ export default function DebtsPage() {
   const { openNew } = useTransactionDrawer()
   const actions = useDebtActions()
   const toast = useToast()
+  const money = useMoney()
   const plans = useQuery(listPlans, [], ['installments', 'transactions'])
   const [debtModal, setDebtModal] = useState<DebtModal>(null)
   const [cardModal, setCardModal] = useState<CardModal>(null)
@@ -43,7 +46,8 @@ export default function DebtsPage() {
   const receivables = debts.filter((a) => a.type === 'receivable' && !a.archived)
   const archived = debts.filter((a) => a.archived)
   const cards = accounts.filter((a) => a.type === 'credit_card' && !a.archived)
-  const owe = [...loans, ...cards].reduce((s, a) => s + debtOf(a), 0)
+  // Tarjetas en UF/USD: su deuda en pesos de hoy.
+  const owe = [...loans, ...cards].reduce((s, a) => s + debtOf({ balance: money.clp(a) }), 0)
   const owed = receivables.reduce((s, a) => s + Math.max(0, a.balance), 0)
   const shownOwe = useAnimatedNumber(owe)
   const shownOwed = useAnimatedNumber(owed)
@@ -114,15 +118,18 @@ export default function DebtsPage() {
         </p>
       )}>
         {cards.map((a) => {
-          const s = cardStatus(a)
+          const cur = currencyOf(a)
+          const s = cardStatus({ balance: nativeBalance(a), credit_limit: a.credit_limit })
           return (
             <Item key={a.id} account={a}
               subtitle={[a.closing_day && `Cierra el ${a.closing_day}`, a.payment_day && `Paga el ${a.payment_day}`].filter(Boolean).join(' · ')}
-              amountLabel="Deuda" amount={s.debt} amountClass={s.debt > 0 ? 'text-neg' : ''}
+              amountLabel="Deuda" amount={s.debt} currency={cur} amountClass={s.debt > 0 ? 'text-neg' : ''}
               onEdit={() => setCardModal(a)}
               action={s.debt > 0 && (
                 <Button size="sm" onClick={() => openNew({
-                  type: 'transfer', to_account_id: a.id, amount: s.debt, note: `Pago ${a.name}`,
+                  type: 'transfer', to_account_id: a.id, note: `Pago ${a.name}`,
+                  // Tarjeta en UF/USD: se precompleta cuánto llega en su moneda.
+                  ...(cur === 'CLP' ? { amount: s.debt } : { to_amount_native: s.debt }),
                 }, 'Pagar tarjeta')}>Pagar</Button>
               )}>
               {s.usedPct != null && (
@@ -131,7 +138,7 @@ export default function DebtsPage() {
                     barClass={s.usedPct >= 80 ? 'bg-warn-bar' : 'bg-ink'} />
                   <p className={`flex items-center gap-1.5 text-xs ${s.usedPct >= 80 ? 'font-medium text-warn' : 'text-muted'}`}>
                     {s.usedPct >= 80 && <TriangleAlert size={14} strokeWidth={2.25} aria-hidden />}
-                    {s.usedPct}% del cupo usado · disponible {formatCLP(s.available ?? 0)}
+                    {s.usedPct}% del cupo usado · disponible {formatMoney(s.available ?? 0, cur)}
                   </p>
                 </>
               )}
@@ -258,9 +265,9 @@ function Section({ title, children, empty, headerAction }: {
  * Tarjeta de la lista. Con `account` de deuda o "me deben", el título lleva a
  * su detalle; con onEdit (tarjetas y cuotas) se edita en el momento.
  */
-function Item({ account, icon, color, title, subtitle, amountLabel, amount, amountClass = '', onEdit, action, children }: {
+function Item({ account, icon, color, title, subtitle, amountLabel, amount, currency = 'CLP', amountClass = '', onEdit, action, children }: {
   account?: AccountWithBalance; icon?: LucideIcon; color?: string; title?: string; subtitle: string
-  amountLabel: string; amount: number; amountClass?: string
+  amountLabel: string; amount: number; currency?: Currency; amountClass?: string
   onEdit?: () => void; action?: ReactNode; children?: ReactNode
 }) {
   const detail = account && (account.type === 'loan' || account.type === 'receivable') ? `/deudas/${account.id}` : null
@@ -285,7 +292,7 @@ function Item({ account, icon, color, title, subtitle, amountLabel, amount, amou
         <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <div>
             <p className="label-caps">{amountLabel}</p>
-            <p className={`text-[1.375rem] leading-tight font-bold tracking-[-0.02em] tabular-nums ${amountClass}`}>{formatCLP(amount)}</p>
+            <p className={`text-[1.375rem] leading-tight font-bold tracking-[-0.02em] tabular-nums ${amountClass}`}>{formatMoney(amount, currency)}</p>
           </div>
           {(action || onEdit) && (
             <div className="flex flex-wrap justify-end gap-2">

@@ -15,12 +15,17 @@ import {
   createTransaction, deleteSplitGroup, deleteTransaction, listSplitParts, parseTags, saveSplit, splitAvailable, updateTransaction,
 } from '@/data/transactions'
 import { budgetUsage } from '@/data/budgets'
+import { getRate, saveRate } from '@/data/rates'
 import { budgetStatus } from '@/lib/budget'
 import { addDays } from '@/lib/dates'
-import { todayISO } from '@/lib/format'
+import {
+  convertAmount, currencyOf, formatMoney, needsRate, needsToValue, txAmounts, type Currency, type ForeignCurrency,
+} from '@/lib/currency'
+import { formatDate, todayISO } from '@/lib/format'
 import { splitStatus, type DraftPart } from '@/lib/split'
 import { useQuery } from '@/hooks/useQuery'
-import { AmountInput } from '@/components/AmountInput'
+import { MoneyInput } from '@/components/MoneyInput'
+import { RateField } from '@/components/RateField'
 import { CategoryPicker } from '@/components/CategoryPicker'
 import { AccountIcon } from '@/components/icons'
 import { useConfirm, useToast } from '@/components/Feedback'
@@ -104,8 +109,21 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
 
   const [type, setType] = useState<TxType>(init.type ?? 'expense')
   const isSplit = !!splitParts && splitParts.length > 1
+  // Monto en la moneda de la cuenta de origen (en una cuenta en UF/USD, su monto en esa moneda).
   const [amount, setAmount] = useState<number | null>(
-    isSplit ? splitParts.reduce((s, p) => s + p.amount, 0) : init.amount ?? null)
+    isSplit ? splitParts.reduce((s, p) => s + p.amount, 0) : init.amount_native ?? init.amount ?? null)
+  // Transferencia entre monedas distintas: cuánto llegó a la cuenta de destino (en su moneda).
+  const initToValue = init.to_amount_native
+    ?? (init.type === 'transfer' && init.amount_native != null && currencyOf(initTo ?? {}) === 'CLP' ? init.amount ?? null : null)
+  const [toAmount, setToAmount] = useState<number | null>(initToValue)
+  // Un monto "automático" se calcula desde el otro con el valor del día hasta que se escribe a mano.
+  const [amountAuto, setAmountAuto] = useState(init.amount == null && init.amount_native == null && initToValue != null)
+  const [toAuto, setToAuto] = useState(initToValue == null)
+  // Valor del día escrito a mano (o, al editar, el que se usó: así no cambian los pesos).
+  const [rateOverride, setRateOverride] = useState<number | null>(
+    init.amount_native && init.amount && !(init.type === 'transfer' && currencyOf(initTo ?? {}) === 'CLP')
+      ? init.amount / init.amount_native : null)
+  const [editingRate, setEditingRate] = useState(false)
   const [categoryId, setCategoryId] = useState<string | null>(isSplit ? splitParts[0].category_id : init.category_id ?? null)
   const [parts, setParts] = useState<DraftPart[] | null>(
     isSplit ? splitParts.map((p) => ({ categoryId: p.category_id, amount: p.amount })) : null)
@@ -126,15 +144,51 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // Monedas: la de la cuenta de origen y, en transferencias, la de destino.
+  const fromAcc = accountById.get(accountId)
+  const toAcc = type === 'transfer' ? accountById.get(toAccountId) : undefined
+  const fromCur = currencyOf(fromAcc ?? {})
+  const toCur: Currency | null = type === 'transfer' ? currencyOf(toAcc ?? {}) : null
+  const shape = { type, from: fromCur, to: toCur }
+  const showTo = needsToValue(shape)
+  // La moneda extranjera cuyo valor del día se muestra (y se puede corregir).
+  const primary: ForeignCurrency | null = fromCur !== 'CLP' ? fromCur : toCur && toCur !== 'CLP' ? toCur : null
+  const foreign = [...new Set([fromCur, toCur].filter((c): c is ForeignCurrency => !!c && c !== 'CLP'))].sort()
+  const fetched = useQuery(async () => {
+    const values = await Promise.all(foreign.map((c) => getRate(c, date)))
+    return Object.fromEntries(foreign.map((c, i) => [c, values[i]]).filter(([, v]) => v != null)) as Partial<Record<ForeignCurrency, number>>
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foreign.join(','), date])
+  const rates = { ...fetched.data, ...(primary && rateOverride ? { [primary]: rateOverride } : {}) }
+  const amountEff = amountAuto && toAmount != null && toCur ? convertAmount(toAmount, toCur, fromCur, rates) : amount
+  const toEff = showTo ? (toAuto && amountEff != null ? convertAmount(amountEff, fromCur, toCur!, rates) : toAmount) : null
+  const computed = amountEff ? txAmounts(shape, amountEff, toEff, rates) : null
+  const missingRate = needsRate(shape) && !rates[fromCur as ForeignCurrency]
+
+  /** Al cambiar a una cuenta en otra moneda, los montos ya no sirven. */
+  function pickAccount(id: string, side: 'from' | 'to') {
+    const before = side === 'from' ? fromCur : toCur
+    const after = currencyOf(accountById.get(id) ?? {})
+    if (side === 'from') setAccountId(id)
+    else setToAccountId(id)
+    if (before !== after) {
+      if (side === 'from') { setAmount(null); setAmountAuto(false) }
+      setToAmount(null); setToAuto(true); setRateOverride(null); setEditingRate(false)
+    }
+  }
+
   const kindCats = useMemo(
     () => categories.filter((c) => c.kind === type && (!c.archived || c.id === tx?.category_id)),
     [categories, type, tx?.category_id],
   )
 
   const errors = {
-    amount: !amount ? 'Ingresa un monto mayor a $0.' : '',
+    amount: !amountEff ? `Ingresa un monto mayor a ${formatMoney(0, fromCur)}.` : '',
+    toAmount: showTo && !toEff ? `Ingresa cuánto llegó a ${toAcc?.name ?? 'la cuenta de destino'}.` : '',
+    rate: missingRate ? `Ingresa el valor de 1 ${fromCur} el ${formatDate(date)}.` : '',
     category: type !== 'transfer' && !parts && !categoryId ? 'Elige una categoría.' : '',
-    split: parts ? splitStatus(amount, parts).error
+    split: parts && fromCur !== 'CLP' ? 'Los movimientos divididos son solo en cuentas en pesos.'
+      : parts ? splitStatus(amount, parts).error
       : tx?.split_group && type === 'transfer' ? 'Un movimiento dividido no puede ser transferencia: elimínalo y regístralo de nuevo.' : '',
     account: !accountId ? 'Elige una cuenta.' : '',
     toAccount: type === 'transfer' && (!toAccountId || toAccountId === accountId)
@@ -168,9 +222,13 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
     if (hasErrors) return
     setError('')
     setBusy(true)
+    const amounts = computed!
     const input: TxInput = {
       type,
-      amount: amount!,
+      amount: amounts.amount,
+      // Solo se envían si hay montos en otra moneda (o había y ya no): sin la migración 0009 no existen.
+      ...((amounts.amount_native != null || tx?.amount_native != null) && { amount_native: amounts.amount_native ?? null }),
+      ...((amounts.to_amount_native != null || tx?.to_amount_native != null) && { to_amount_native: amounts.to_amount_native ?? null }),
       date,
       account_id: accountId,
       to_account_id: type === 'transfer' ? toAccountId : null,
@@ -187,6 +245,8 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
         })
       } else if (tx) await updateTransaction(tx.id, input)
       else await createTransaction(input)
+      // El valor escrito a mano queda guardado para ese día.
+      if (primary && rateOverride && editingRate) void saveRate(primary, date, rateOverride).catch(() => {})
       try { localStorage.setItem(LAST_ACCOUNT_KEY, lockedFrom ? toAccountId : accountId) } catch { /* ignorar */ }
       toast(tx ? 'Movimiento actualizado' : flowKind ? `${TRANSFER_LABEL[flowKind]} guardado` : 'Movimiento guardado')
       onDone()
@@ -275,7 +335,8 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
         />
       )}
 
-      <AmountInput label={parts ? 'Monto total' : 'Monto'} value={amount} onChange={setAmount} autoFocus={!tx} big error={show('amount')} />
+      <MoneyInput currency={fromCur} label={parts ? 'Monto total' : showTo ? 'Monto que sale' : 'Monto'} value={amountEff}
+        onChange={(v) => { setAmount(v); setAmountAuto(false) }} autoFocus={!tx} big error={show('amount')} />
 
       {type !== 'transfer' && (parts ? (
         <SplitEditor total={amount} parts={parts} onChange={setParts} categories={kindCats} showError={submitted} />
@@ -283,7 +344,7 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
         <CategoryPicker categories={kindCats} value={categoryId} onChange={setCategoryId} error={show('category')} />
       ))}
       {show('split') && !parts && <Alert>{show('split')}</Alert>}
-      {canSplit && type !== 'transfer' && !locked && !tx?.installment_plan_id && (
+      {canSplit && type !== 'transfer' && !locked && !tx?.installment_plan_id && fromCur === 'CLP' && (
         <div className="-mt-2">
           <Button type="button" variant="ghost" size="sm" icon={Split} onClick={toggleSplit}>
             {parts ? 'Quitar la división (una sola categoría)' : 'Dividir en varias categorías'}
@@ -293,7 +354,7 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
 
       {locked ? (
         lockedTo ? (
-          <Select value={accountId} error={show('account')} onChange={(e) => setAccountId(e.target.value)}
+          <Select value={accountId} error={show('account')} onChange={(e) => pickAccount(e.target.value, 'from')}
             label={lockedTo.type === 'investment' ? '¿Desde qué cuenta aportas?'
               : lockedTo.type === 'receivable' ? '¿De qué cuenta sale el dinero?' : '¿Desde qué cuenta pagas?'}>
             {!accountId && <option value="">Elegir…</option>}
@@ -301,7 +362,7 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
           </Select>
         ) : (
           <Select label="¿A qué cuenta llega el dinero?" value={toAccountId} error={show('toAccount')}
-            onChange={(e) => setToAccountId(e.target.value)}>
+            onChange={(e) => pickAccount(e.target.value, 'to')}>
             {!toAccountId && <option value="">Elegir…</option>}
             {usableAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
@@ -309,17 +370,30 @@ function TransactionFormInner({ tx, preset, onDone, splitParts, canSplit }: Prop
       ) : (
         <div className={`grid gap-3 ${type === 'transfer' ? 'grid-cols-2' : ''}`}>
           <Select label={type === 'transfer' ? 'Desde' : 'Cuenta'} value={accountId}
-            error={show('account')} onChange={(e) => setAccountId(e.target.value)}>
+            error={show('account')} onChange={(e) => pickAccount(e.target.value, 'from')}>
             {!accountId && <option value="">Elegir…</option>}
             {usableAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
           {type === 'transfer' && (
-            <Select label="Hacia" value={toAccountId} error={show('toAccount')} onChange={(e) => setToAccountId(e.target.value)}>
+            <Select label="Hacia" value={toAccountId} error={show('toAccount')} onChange={(e) => pickAccount(e.target.value, 'to')}>
               <option value="">Elegir…</option>
               {usableAccounts.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           )}
         </div>
+      )}
+
+      {showTo && toCur && (
+        <MoneyInput currency={toCur} label={`Llega a ${toAcc?.name ?? 'la cuenta de destino'}`} value={toEff}
+          onChange={(v) => { setToAmount(v); setToAuto(false) }} error={show('toAmount')}
+          hint={toAuto && toEff != null ? 'Calculado con el valor del día: cámbialo si llegó otro monto.' : undefined} />
+      )}
+      {primary && (
+        <RateField currency={primary} date={date} rate={rates[primary] ?? null} loading={fetched.loading}
+          editing={editingRate || missingRate} error={show('rate')}
+          clp={fromCur !== 'CLP' && computed ? computed.amount : null}
+          onEdit={() => { setEditingRate(true); setRateOverride(rates[primary] ?? null) }}
+          onChange={(v) => { setRateOverride(v); setEditingRate(true) }} />
       )}
 
       <div className="flex flex-col gap-1">

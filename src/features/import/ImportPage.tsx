@@ -5,6 +5,7 @@
 // quedan desmarcadas como "posible duplicado".
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { categoryMemory, deleteBatch, existingHashes, importRows, listBatches, manualKeys, type ImportPayloadRow } from '@/data/imports'
 import { listCategoryRules } from '@/data/rules'
 import { useQuery } from '@/hooks/useQuery'
@@ -67,7 +68,8 @@ export default function ImportPage() {
   const { accounts, categories, categoryById, accountById } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
-  const usable = accounts.filter((a) => !a.archived)
+  // Las cartolas se importan en pesos.
+  const usable = accounts.filter((a) => !a.archived && inPesos(a))
 
   const [step, setStep] = useState<'file' | 'map' | 'review'>('file')
   const [accountId, setAccountId] = useState(usable[0]?.id ?? '')

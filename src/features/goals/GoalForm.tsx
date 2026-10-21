@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { createGoal, deleteGoal, updateGoal } from '@/data/goals'
 import { COLORS, isLiability } from '@/lib/icons'
 import { AmountInput } from '@/components/AmountInput'
@@ -17,7 +18,8 @@ export function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) 
   const confirm = useConfirm()
   const toast = useToast()
   // Solo cuentas de activo (no tarjetas ni préstamos).
-  const linkable = accounts.filter((a) => !isLiability(a.type) && (!a.archived || a.id === goal?.account_id))
+  // Las metas son en pesos: se vinculan a cuentas en pesos.
+  const linkable = accounts.filter((a) => !isLiability(a.type) && inPesos(a) && (!a.archived || a.id === goal?.account_id))
   const linkableInvestments = investments.filter((a) => !a.archived || a.id === goal?.account_id)
 
   const [name, setName] = useState(goal?.name ?? '')

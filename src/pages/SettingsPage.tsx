@@ -1,16 +1,18 @@
 // Ajustes, agrupados como en la app de Configuración de iOS.
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Download, FileJson, FileSpreadsheet, Monitor, Moon, Shield, Sun, Tags, Trash2 } from 'lucide-react'
+import { ChevronRight, Coins, Download, FileJson, FileSpreadsheet, Monitor, Moon, Shield, Sun, Tags, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/auth/AuthProvider'
+import { useRefData } from '@/context/RefData'
+import { setMultiCurrency } from '@/data/profile'
 import { exportJSON, exportTransactionsCSV } from '@/data/export'
 import { useInstallPrompt } from '@/lib/pwa'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
 import { ChangePasswordForm } from '@/components/ChangePasswordForm'
 import { useToast } from '@/components/Feedback'
 import { IconTile } from '@/components/icons'
-import { Alert, Button, Card, Field, PageHeader, Segmented } from '@/components/ui'
+import { Alert, Button, Card, Checkbox, Field, PageHeader, Segmented } from '@/components/ui'
 
 const CONFIRM_WORD = 'ELIMINAR'
 
@@ -42,6 +44,7 @@ export default function SettingsPage() {
 
       <Group title="Preferencias">
         <AppearanceCard />
+        <CurrencyCard />
         <Link to="/categorias"
           className="card pressable flex items-center gap-3.5 px-4 py-3.5 transition-[border-color] duration-200 hover:border-line-strong/40">
           <IconTile icon={Tags} />
@@ -190,6 +193,54 @@ function DeleteAccountCard() {
           Eliminar definitivamente
         </Button>
       </form>
+    </Card>
+  )
+}
+
+/** Opción "Usar UF y dólares": apagada, la app queda solo en pesos como siempre. */
+function CurrencyCard() {
+  const { multiCurrency, currencyAvailable, accounts } = useRefData()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  // La casilla cambia al tocarla; si no se puede guardar, vuelve a como estaba.
+  const [checked, setChecked] = useState(multiCurrency)
+  const [seen, setSeen] = useState(multiCurrency)
+  if (seen !== multiCurrency) { setSeen(multiCurrency); setChecked(multiCurrency) }
+  const hasForeign = accounts.some((a) => (a.currency ?? 'CLP') !== 'CLP')
+
+  async function toggle(on: boolean) {
+    setBusy(true)
+    setChecked(on)
+    try {
+      await setMultiCurrency(on)
+      toast(on ? 'Ahora puedes crear cuentas en UF y dólares' : 'Opción de UF y dólares desactivada')
+    } catch (err) {
+      setChecked(!on)
+      toast(err instanceof Error ? err.message : 'No se pudo guardar.', 'error')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <Card pad="sm" className="flex flex-col gap-3 md:p-5">
+      <div className="flex items-center gap-3">
+        <IconTile icon={Coins} />
+        <div className="min-w-0">
+          <h3 className="font-semibold">UF y dólares</h3>
+          <p className="text-[0.8125rem] text-muted">Cuentas en UF o USD y ver tus saldos en otra moneda.</p>
+        </div>
+      </div>
+      {currencyAvailable ? (
+        <Checkbox label="Usar UF y dólares" checked={checked} onChange={(on) => { if (!busy) void toggle(on) }}
+          hint={checked
+            ? 'Al crear una cuenta eliges su moneda, y en Cuentas puedes ver los saldos en pesos, UF o dólares. Los reportes siguen en pesos (al valor de cada día).'
+            : hasForeign ? 'Tus cuentas en UF o USD se siguen mostrando en su moneda.' : 'Desactivado: todo se muestra en pesos, como siempre.'} />
+      ) : (
+        <Alert kind="info">
+          Para usar UF y dólares, ejecuta <code>supabase/migrations/0009_multimoneda.sql</code> en el SQL Editor de Supabase
+          (una sola vez).
+        </Alert>
+      )}
     </Card>
   )
 }

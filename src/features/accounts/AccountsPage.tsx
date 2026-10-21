@@ -6,6 +6,8 @@ import { ChevronDown, ChevronRight, HandCoins, Plus, TrendingUp, Wallet, type Lu
 import { useRefData } from '@/context/RefData'
 import { listInvestmentStatus } from '@/data/investments'
 import { useQuery } from '@/hooks/useQuery'
+import { useMoney } from '@/hooks/useMoney'
+import { CURRENCIES, currencyOf, formatMoney, nativeBalance, rateLabel, type Currency } from '@/lib/currency'
 import { formatCLP } from '@/lib/format'
 import { ACCOUNT_TYPES } from '@/lib/icons'
 import { cardStatus, debtOf } from '@/lib/debt'
@@ -14,20 +16,23 @@ import { useAnimatedNumber } from '@/lib/motion'
 import { AccountIcon, IconTile } from '@/components/icons'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/Modal'
-import { Alert, Button, EmptyState, Loading, PageHeader } from '@/components/ui'
+import { Alert, Button, EmptyState, Loading, PageHeader, Segmented } from '@/components/ui'
 import type { AccountWithBalance } from '@/types'
 import { AccountForm } from './AccountForm'
 
 export default function AccountsPage() {
-  const { accounts, debts, investments, loading, error } = useRefData()
+  const { accounts, debts, investments, loading, error, setViewCurrency } = useRefData()
+  const money = useMoney()
   const status = useQuery(listInvestmentStatus, [], ['accounts', 'transactions', 'investments'])
   const [editing, setEditing] = useState<AccountWithBalance | 'new' | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
   const active = accounts.filter((a) => !a.archived)
   const archived = accounts.filter((a) => a.archived)
-  const total = active.reduce((s, a) => s + a.balance, 0)
+  // En pesos de hoy: las cuentas en UF/USD se convierten con el valor del día.
+  const total = active.reduce((s, a) => s + money.clp(a), 0)
   const shownTotal = useAnimatedNumber(total)
+  const totalInView = money.viewCurrency === 'CLP' ? null : money.view(total)
   const activeDebts = debts.filter((a) => !a.archived)
   const owe = activeDebts.filter((a) => a.type === 'loan').reduce((s, a) => s + debtOf(a), 0)
   const owed = activeDebts.filter((a) => a.type === 'receivable').reduce((s, a) => s + Math.max(0, a.balance), 0)
@@ -38,6 +43,19 @@ export default function AccountsPage() {
     <div className="flex flex-col gap-8">
       <PageHeader title="Cuentas"
         action={active.length > 0 && <Button icon={Plus} onClick={() => setEditing('new')}>Nueva cuenta</Button>} />
+
+      {money.multiCurrency && active.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="w-full max-w-xs">
+            <Segmented<Currency> label="Ver saldos en" value={money.viewCurrency} onChange={setViewCurrency}
+              options={(Object.keys(CURRENCIES) as Currency[]).map((c) => ({ value: c, label: CURRENCIES[c].label }))} />
+          </div>
+          <p className="text-xs text-muted">
+            {(['UF', 'USD'] as const).map((c) => money.rates[c] && rateLabel(c, money.rates[c]!)).filter(Boolean).join(' · ')
+              || 'Sin el valor de hoy de la UF y el dólar: se muestra en pesos.'}
+          </p>
+        </div>
+      )}
 
       {error && <Alert>{error}</Alert>}
       {loading ? (
@@ -54,7 +72,7 @@ export default function AccountsPage() {
           <div className="animate-enter rounded-lg bg-accent p-6 text-on-accent shadow-[var(--shadow-float)] md:p-8">
             <p className="text-xs font-medium tracking-[0.08em] uppercase opacity-75">Saldo total</p>
             <p className="figure-hero mt-2 text-[2.25rem] leading-none md:text-[3rem]">
-              <span className="sr-only">{formatCLP(total)}</span><span aria-hidden>{formatCLP(shownTotal)}</span>
+              <span className="sr-only">{totalInView ?? formatCLP(total)}</span><span aria-hidden>{totalInView ?? formatCLP(shownTotal)}</span>
             </p>
             <p className="mt-3 text-sm opacity-75">Lo que tienes en tus cuentas; lo usado en tarjetas resta.</p>
           </div>
@@ -128,8 +146,12 @@ function ElsewhereRow({ to, icon, title, detail }: { to: string; icon: LucideIco
 function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onClick: () => void }) {
   const inst = institutionById(a.institution)
   const isCard = a.type === 'credit_card'
-  const { debt, available, usedPct } = cardStatus(a)
+  const money = useMoney()
+  const cur = currencyOf(a)
+  const { debt, available, usedPct } = cardStatus({ balance: nativeBalance(a), credit_limit: a.credit_limit })
   const amountCls = 'figure-hero text-[1.375rem] leading-tight'
+  // Otra moneda que la de "Ver en": el equivalente, chico, bajo el monto.
+  const approx = money.approx(a)
 
   return (
     <li>
@@ -147,14 +169,15 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
           <>
             <div>
               <p className="label-caps">Deuda</p>
-              <p className={amountCls}>{formatCLP(debt)}</p>
+              <p className={amountCls}>{formatMoney(debt, cur)}</p>
+              {approx && <p className="text-xs text-muted">{approx.replace('-', '')}</p>}
             </div>
             {usedPct != null && (
               <ProgressBar pct={usedPct} label={`Cupo utilizado: ${usedPct}%`}
                 barClass={usedPct >= 80 ? 'bg-warn-bar' : 'bg-ink'} />
             )}
             <p className="text-xs text-muted">
-              {available != null && <>Disponible {formatCLP(available)} de {formatCLP(a.credit_limit!)} · </>}
+              {available != null && <>Disponible {formatMoney(available, cur)} de {formatMoney(a.credit_limit!, cur)} · </>}
               {a.closing_day && <>Cierra el {a.closing_day} · </>}
               {a.payment_day && <>Paga el {a.payment_day}</>}
             </p>
@@ -162,7 +185,8 @@ function AccountCard({ account: a, onClick }: { account: AccountWithBalance; onC
         ) : (
           <div>
             <p className="label-caps">Saldo</p>
-            <p className={`${amountCls} ${a.balance < 0 ? 'text-neg' : ''}`}>{formatCLP(a.balance)}</p>
+            <p className={`${amountCls} ${nativeBalance(a) < 0 ? 'text-neg' : ''}`}>{money.native(a)}</p>
+            {approx && <p className="text-xs text-muted">{approx}</p>}
           </div>
         )}
       </button>

@@ -62,8 +62,16 @@ export class FakeSupabase {
 
   get categories() { return this.tables.categories }
 
+  /** Valores que responde mindicador.cl ('fail' = no responde, como sin conexión o si bloquea el navegador). */
+  indicators: { UF: number; USD: number } | 'fail' = { UF: 39500, USD: 950 }
+
   /** Intercepta Supabase en la página. Con `signedIn` la sesión ya está guardada (como al volver a abrir la app). */
   async install(page: Page, { signedIn = false } = {}) {
+    await page.route('https://mindicador.cl/**', (route) => {
+      if (this.indicators === 'fail') return route.abort('failed')
+      const valor = route.request().url().includes('/uf/') ? this.indicators.UF : this.indicators.USD
+      return route.fulfill({ json: { serie: [{ fecha: new Date().toISOString(), valor }] }, headers: { 'access-control-allow-origin': '*' } })
+    })
     if (signedIn) {
       await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [STORAGE_KEY, JSON.stringify(this.session())])
     }
@@ -201,7 +209,16 @@ export class FakeSupabase {
         }
         if (t.type === 'transfer' && t.to_account_id === a.id) inflow += amount
       }
-      return { account_id: a.id, balance: Number(a.initial_balance) + inflow - outflow, inflow, outflow }
+      // Como la vista de la migración 0009: saldo en la moneda de la cuenta (null en pesos).
+      let native: number | null = null
+      if (a.currency && a.currency !== 'CLP') {
+        native = Number(a.initial_balance_native)
+        for (const t of this.tables.transactions) {
+          if (t.account_id === a.id) native += (t.type === 'income' ? 1 : -1) * Number(t.amount_native)
+          else if (t.type === 'transfer' && t.to_account_id === a.id) native += Number(t.to_amount_native)
+        }
+      }
+      return { account_id: a.id, balance: Number(a.initial_balance) + inflow - outflow, inflow, outflow, balance_native: native }
     })
   }
 

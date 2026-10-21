@@ -2,6 +2,7 @@
 // Al crear, la BD genera todas las cuotas (una por mes) en la tarjeta.
 import { useState, type FormEvent } from 'react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { createPlan, deletePlan, updatePlan, type PlanWithStatus } from '@/data/installments'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
 import { CalendarClock, Trash2 } from 'lucide-react'
@@ -16,7 +17,8 @@ export function InstallmentForm({ plan, onDone }: { plan?: PlanWithStatus; onDon
   const { accounts, categories } = useRefData()
   const confirm = useConfirm()
   const toast = useToast()
-  const cards = accounts.filter((a) => a.type === 'credit_card' && (!a.archived || a.id === plan?.account_id))
+  // Solo tarjetas en pesos (las cuotas se registran en pesos).
+  const cards = accounts.filter((a) => a.type === 'credit_card' && inPesos(a) && (!a.archived || a.id === plan?.account_id))
   const expenseCats = categories.filter((c) => c.kind === 'expense' && (!c.archived || c.id === plan?.category_id))
 
   const [description, setDescription] = useState(plan?.description ?? '')

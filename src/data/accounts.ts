@@ -5,13 +5,14 @@ import { unwrap } from '@/lib/errors'
 import { emitChange } from '@/lib/events'
 import type { Account, AccountInput, AccountWithBalance } from '@/types'
 
-type BalanceRow = { account_id: string; balance: number; inflow: number; outflow: number }
+type BalanceRow = { account_id: string; balance: number; inflow: number; outflow: number; balance_native?: number | null }
 
 /** Todas las cuentas (incluidas archivadas) con su saldo y lo que entró y salió. */
 export async function listAccounts(): Promise<AccountWithBalance[]> {
   const [accs, bals] = await Promise.all([
     supabase.from('accounts').select('*').order('created_at'),
-    supabase.from('account_balances').select('account_id, balance, inflow, outflow'),
+    // '*': balance_native existe desde la migración 0009 (sin ella, la app sigue en pesos).
+    supabase.from('account_balances').select('*'),
   ])
   const accounts = unwrap<Account[]>(accs)
   const balances = new Map(unwrap<BalanceRow[]>(bals).map((b) => [b.account_id, b]))
@@ -22,6 +23,8 @@ export async function listAccounts(): Promise<AccountWithBalance[]> {
       balance: b ? Number(b.balance) : a.initial_balance,
       inflow: Number(b?.inflow ?? 0),
       outflow: Number(b?.outflow ?? 0),
+      balance_native: b?.balance_native != null ? Number(b.balance_native)
+        : a.initial_balance_native != null ? Number(a.initial_balance_native) : null,
     }
   })
 }
