@@ -1,5 +1,6 @@
 // Tipos de las tablas de Supabase (escritos a mano para no depender del CLI).
 // Si cambias el esquema SQL, actualiza también este archivo.
+import type { Currency } from '@/lib/currency'
 
 /**
  * Cuentas de dinero: cash, bank, savings, credit_card (aparecen en Cuentas y en los formularios).
@@ -34,16 +35,24 @@ export type Account = {
   color: string
   archived: boolean
   created_at: string
+  /** Moneda de la cuenta (migración 0009; undefined sin ella = pesos). */
+  currency?: Currency
+  /** Cuentas en UF/USD: saldo inicial en esa moneda (initial_balance queda en pesos). */
+  initial_balance_native?: number | null
 }
 
 /** inflow: ingresos + transferencias recibidas; outflow: gastos + transferencias enviadas. */
-export type AccountWithBalance = Account & { balance: number; inflow: number; outflow: number }
+export type AccountWithBalance = Account & {
+  balance: number; inflow: number; outflow: number
+  /** Saldo en la moneda de la cuenta (null en pesos). */
+  balance_native: number | null
+}
 
 export type AccountInput = Pick<
   Account,
   | 'name' | 'type' | 'initial_balance' | 'credit_limit' | 'closing_day' | 'payment_day'
   | 'counterparty' | 'loan_amount' | 'loan_installment' | 'loan_installments_count' | 'interest_rate'
-  | 'institution' | 'investment_kind' | 'color' | 'archived'
+  | 'institution' | 'investment_kind' | 'color' | 'archived' | 'currency' | 'initial_balance_native'
 >
 
 export type CategoryKind = 'income' | 'expense'
@@ -87,6 +96,10 @@ export type Transaction = {
   installment_plan_id: string | null
   installment_no: number | null
   import_batch_id: string | null
+  /** Cuenta en UF/USD: monto en su moneda (amount queda en pesos del día). Migración 0009. */
+  amount_native?: number | null
+  /** Transferencia a una cuenta en UF/USD: cuánto llegó en esa moneda. */
+  to_amount_native?: number | null
   /** Partes de un movimiento dividido en varias categorías (migración 0008; undefined sin ella). */
   split_group?: string | null
   created_at: string
@@ -96,6 +109,7 @@ export type Transaction = {
 export type TxInput = Pick<
   Transaction,
   'type' | 'amount' | 'date' | 'account_id' | 'to_account_id' | 'category_id' | 'note' | 'tags'
+  | 'amount_native' | 'to_amount_native'
 >
 
 // ---------------------------------------------------------------------

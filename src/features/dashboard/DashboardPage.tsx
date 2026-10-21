@@ -10,6 +10,7 @@ import { monthlyTotals } from '@/data/dashboard'
 import { listTransactions } from '@/data/transactions'
 import { useQuery } from '@/hooks/useQuery'
 import { budgetStatus } from '@/lib/budget'
+import { balanceCLP } from '@/lib/currency'
 import { monthLabel, monthRange } from '@/lib/dates'
 import { Alert, Button, Card, EmptyState, PageHeader, SectionHeader, buttonLinkCls } from '@/components/ui'
 import { BudgetProgress } from '@/features/budgets/BudgetProgress'
@@ -28,7 +29,7 @@ const chartFallback = <span className="skeleton block h-64 w-full" role="status"
 
 export default function DashboardPage() {
   const { month } = useMonth()
-  const { accounts, categoryById, loading } = useRefData()
+  const { accounts, categoryById, loading, rates } = useRefData()
   const { openNew, openEdit } = useTransactionDrawer()
 
   const q = useQuery(
@@ -56,7 +57,8 @@ export default function DashboardPage() {
 
   const current = totals[totals.length - 1]
   const previous = totals[totals.length - 2]
-  const totalBalance = active.reduce((s, a) => s + a.balance, 0)
+  // Cuentas en UF/USD: en pesos al valor de hoy.
+  const totalBalance = active.reduce((s, a) => s + balanceCLP(a, rates), 0)
   const alerts = budgets
     .map((b) => ({ b, c: categoryById.get(b.category_id), spent: spending.get(b.category_id) ?? 0 }))
     .filter((x) => x.c && budgetStatus(x.spent, x.b.amount).level !== 'ok')

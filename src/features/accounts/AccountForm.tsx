@@ -7,15 +7,21 @@
 // Las deudas y los "me deben" se crean en Deudas; las inversiones, en Inversiones.
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Banknote, Landmark, Trash2 } from 'lucide-react'
+import { useRefData } from '@/context/RefData'
 import { createAccount, deleteAccount, updateAccount } from '@/data/accounts'
+import { getRate, saveRate } from '@/data/rates'
+import { useQuery } from '@/hooks/useQuery'
+import { CURRENCIES, toCLP, type Currency } from '@/lib/currency'
+import { todayISO } from '@/lib/format'
 import { AppError } from '@/lib/errors'
 import { COLORS } from '@/lib/icons'
 import { INSTITUTIONS, OTHER_PRODUCTS, institutionById, productAccountName, type Product } from '@/lib/institutions'
-import { AmountInput } from '@/components/AmountInput'
+import { MoneyInput } from '@/components/MoneyInput'
+import { RateField } from '@/components/RateField'
 import { ACCOUNT_ICONS, AccountIcon, IconTile, InstitutionMark } from '@/components/icons'
 import { ColorPicker } from '@/components/Pickers'
 import { useConfirm, useToast } from '@/components/Feedback'
-import { Alert, Button, Checkbox, Field } from '@/components/ui'
+import { Alert, Button, Checkbox, Field, Segmented } from '@/components/ui'
 import type { Account, AccountInput } from '@/types'
 
 type MoneyType = 'cash' | 'bank' | 'savings' | 'credit_card'
@@ -38,7 +44,11 @@ export function AccountForm({
 }: { account?: Account; defaultType?: MoneyType; onDone: () => void }) {
   const confirm = useConfirm()
   const toast = useToast()
+  const { multiCurrency } = useRefData()
   const editing = !!account
+  // Moneda: se elige al crear (con la opción "Usar UF y dólares"); después no cambia.
+  const [currency, setCurrency] = useState<Currency>(account?.currency ?? 'CLP')
+  const foreign = currency !== 'CLP'
 
   const [where, setWhere] = useState<Where | ''>(
     account ? (account.type === 'cash' ? 'cash' : account.institution ?? 'other') : '',
@@ -51,7 +61,8 @@ export function AccountForm({
   const [colorTouched, setColorTouched] = useState(editing)
   const [showBanks, setShowBanks] = useState(!editing)
   const isCard = type === 'credit_card'
-  const [initial, setInitial] = useState<number | null>(account ? Math.abs(account.initial_balance) : null)
+  const [initial, setInitial] = useState<number | null>(
+    account ? Math.abs(Number(account.initial_balance_native ?? account.initial_balance)) : null)
   const [negative, setNegative] = useState(account ? account.initial_balance < 0 && account.type !== 'credit_card' : false)
   const [limit, setLimit] = useState<number | null>(account?.credit_limit ?? null)
   const [closingDay, setClosingDay] = useState(account?.closing_day?.toString() ?? '')
@@ -60,6 +71,12 @@ export function AccountForm({
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // Cuenta en UF/USD: valor de hoy para guardar el saldo inicial también en pesos.
+  const today = todayISO()
+  const rateQ = useQuery(() => (currency !== 'CLP' ? getRate(currency, today) : Promise.resolve(null)), [currency, today])
+  const [rateOverride, setRateOverride] = useState<number | null>(null)
+  const [editingRate, setEditingRate] = useState(false)
+  const rate = rateOverride ?? rateQ.data ?? null
 
   const inst = where && where !== 'cash' && where !== 'other' ? institutionById(where) : undefined
   const products: Product[] = inst?.products ?? (where === 'other' ? OTHER_PRODUCTS : [])
@@ -105,6 +122,7 @@ export function AccountForm({
     name: !name.trim() ? 'Ponle un nombre a la cuenta.' : '',
     closing: isCard ? dayError(closingDay) : '',
     payment: isCard ? dayError(paymentDay) : '',
+    rate: foreign && !rate ? `Ingresa el valor de 1 ${currency} hoy.` : '',
   }
   const show = (k: keyof typeof errors) => (submitted ? errors[k] : '')
 
@@ -115,12 +133,17 @@ export function AccountForm({
     setError('')
     setBusy(true)
     const amount = initial ?? 0
+    const sign = isCard || negative ? -1 : 1
     const input: AccountInput = {
       name: name.trim(),
       type,
       // Tarjeta: deuda guardada en negativo. Otras: negativo solo si se marcó "sobregiro".
-      initial_balance: isCard || negative ? -amount : amount,
-      credit_limit: isCard ? limit : null,
+      // En UF/USD: el saldo en su moneda y, en pesos, al valor de hoy.
+      initial_balance: sign * (foreign ? toCLP(amount, rate!) : amount),
+      ...(foreign && { initial_balance_native: sign * amount }),
+      // La moneda se guarda solo al crear (sin la migración 0009 la columna no existe).
+      ...(!account && foreign && { currency }),
+      credit_limit: isCard && limit != null ? Math.round(limit) : null,
       closing_day: isCard && closingDay ? +closingDay : null,
       payment_day: isCard && paymentDay ? +paymentDay : null,
       counterparty: null,
@@ -136,6 +159,7 @@ export function AccountForm({
     try {
       if (account) await updateAccount(account.id, input)
       else await createAccount(input)
+      if (currency !== 'CLP' && rateOverride && editingRate) void saveRate(currency, today, rateOverride).catch(() => {})
       toast(account ? 'Cuenta actualizada' : 'Cuenta creada')
       onDone()
     } catch (err) {
@@ -228,17 +252,31 @@ export function AccountForm({
             placeholder={where === 'other' ? 'Ej: Cuenta Corriente Banco X' : 'Ej: Cuenta para gastos'}
             value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
 
-          <AmountInput
+          {multiCurrency && !editing && (
+            <Segmented<Currency> label="Moneda de la cuenta" value={currency}
+              onChange={(c) => { setCurrency(c); setInitial(null); setLimit(null); setRateOverride(null); setEditingRate(false) }}
+              options={(Object.keys(CURRENCIES) as Currency[]).map((c) => ({ value: c, label: CURRENCIES[c].label }))} />
+          )}
+          {editing && foreign && <p className="text-sm text-muted">Cuenta en {CURRENCIES[currency].name} (la moneda no se cambia).</p>}
+
+          <MoneyInput currency={currency}
             label={isCard ? (editing ? 'Deuda al agregarla' : 'Deuda actual de la tarjeta') : editing ? 'Saldo al agregarla' : 'Saldo actual'}
             hint={editing ? 'Es el punto de partida: el saldo de hoy se calcula sumando tus movimientos.' : undefined}
             value={initial} onChange={setInitial} />
+          {currency !== 'CLP' && (
+            <RateField currency={currency} date={today} rate={rate} loading={rateQ.loading}
+              editing={editingRate || (!rate && !rateQ.loading)} error={show('rate')}
+              clp={initial != null && rate ? toCLP(initial, rate) : null}
+              onEdit={() => { setEditingRate(true); setRateOverride(rate) }}
+              onChange={(v) => { setRateOverride(v); setEditingRate(true) }} />
+          )}
           {!isCard && (
             <Checkbox label="El saldo es negativo (sobregiro o línea de crédito)" checked={negative} onChange={setNegative} />
           )}
 
           {isCard && (
             <>
-              <AmountInput label="Cupo total" value={limit} onChange={setLimit} />
+              <MoneyInput currency={currency} label="Cupo total" value={limit} onChange={setLimit} />
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Día de cierre" inputMode="numeric" placeholder="Ej: 20" value={closingDay}
                   error={show('closing')} onChange={(e) => setClosingDay(digits(e.target.value, 2))} />

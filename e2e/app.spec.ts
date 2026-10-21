@@ -309,3 +309,113 @@ test('sin la migración 0008 no se ofrece dividir', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Comida' })).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Dividir en varias categorías' })).toHaveCount(0)
 })
+
+test.describe('UF y dólares', () => {
+  const profile = (on: boolean) => [{ user_id: USER.id, multi_currency: on }]
+
+  test('se activa en Ajustes; apagada, no se elige moneda al crear una cuenta', async ({ page }) => {
+    const db = new FakeSupabase({ profiles: profile(false), accounts: [account('Cuenta RUT', 100000)] })
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/cuentas')
+    await page.getByRole('button', { name: 'Nueva cuenta' }).first().click()
+    await page.getByRole('dialog').getByText('Efectivo', { exact: true }).click()
+    await expect(page.getByRole('dialog').getByText('Moneda de la cuenta')).toHaveCount(0)
+
+    await page.goto('/#/ajustes')
+    await page.getByLabel('Usar UF y dólares').check()
+    await expect(page.getByText('Ahora puedes crear cuentas en UF y dólares')).toBeVisible()
+    expect(db.tables.profiles[0].multi_currency).toBe(true)
+  })
+
+  test('crear una cuenta en dólares: saldo en USD y en pesos al valor de hoy', async ({ page }) => {
+    const db = new FakeSupabase({ profiles: profile(true), accounts: [account('Cuenta RUT', 100000)] })
+    await db.install(page, { signedIn: true })
+    await page.goto('/#/cuentas')
+    await page.getByRole('button', { name: 'Nueva cuenta' }).first().click()
+    const dialog = page.getByRole('dialog', { name: 'Nueva cuenta' })
+    await dialog.getByText('Efectivo', { exact: true }).click()
+    await dialog.getByRole('radio', { name: 'Dólares' }).check({ force: true })
+    await dialog.getByLabel('Nombre').fill('Dólares en efectivo')
+    await dialog.getByLabel('Saldo actual (US$)').fill('1.000')
+    await expect(dialog.getByText('1 USD = $950')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Crear cuenta' }).click()
+    await expect(dialog).toBeHidden()
+
+    expect(db.tables.accounts[1]).toMatchObject({ currency: 'USD', initial_balance: 950000, initial_balance_native: 1000 })
+    const card = page.getByRole('button', { name: /Dólares en efectivo/ })
+    await expect(card).toContainText('US$1.000,00')
+    await expect(card).toContainText('≈ $950.000')
+    // Total en pesos de hoy: 100.000 + 950.000.
+    await expect(page.getByText('$1.050.000').first()).toBeVisible()
+
+    await page.getByRole('radio', { name: 'Dólares' }).check({ force: true })
+    await expect(page.getByText('US$1.105,26').first()).toBeVisible()
+  })
+
+  test.describe('movimientos', () => {
+    let db: FakeSupabase
+    test.beforeEach(async ({ page }) => {
+      db = new FakeSupabase({
+        profiles: profile(true),
+        accounts: [
+          account('Cuenta RUT', 100000, { id: 'rut' }),
+          account('Cuenta USD', 950000, { id: 'usd', currency: 'USD', initial_balance_native: 1000 }),
+        ],
+      })
+      await db.install(page, { signedIn: true })
+    })
+
+    test('un gasto en dólares se guarda en USD y en pesos del día', async ({ page }) => {
+      await page.goto('/#/movimientos')
+      await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
+      const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
+      await dialog.getByLabel('Cuenta').selectOption({ label: 'Cuenta USD' })
+      await dialog.getByLabel('Monto (US$)').fill('20,5')
+      await expect(dialog.getByText('≈ $19.475')).toBeVisible()
+      await dialog.getByRole('button', { name: 'Comida' }).click()
+      await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+      await expect(dialog).toBeHidden()
+
+      expect(db.tables.transactions).toMatchObject([{ type: 'expense', account_id: 'usd', amount: 19475, amount_native: 20.5 }])
+      await expect(page.getByText('−US$20,50')).toBeVisible()
+      await page.goto('/#/cuentas')
+      await expect(page.getByRole('button', { name: /Cuenta USD/ })).toContainText('US$979,50')
+    })
+
+    test('vender dólares: sale en USD y llega lo que dice el banco en pesos', async ({ page }) => {
+      await page.goto('/#/movimientos')
+      await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
+      const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
+      await dialog.getByRole('radio', { name: 'Transferencia' }).check({ force: true })
+      await dialog.getByLabel('Desde').selectOption({ label: 'Cuenta USD' })
+      await dialog.getByLabel('Hacia').selectOption({ label: 'Cuenta RUT' })
+      await dialog.getByLabel('Monto que sale (US$)').fill('100')
+      await expect(dialog.getByLabel('Llega a Cuenta RUT')).toHaveValue('$95.000')
+      await dialog.getByLabel('Llega a Cuenta RUT').fill('93000')
+      await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+      await expect(dialog).toBeHidden()
+      expect(db.tables.transactions).toMatchObject([
+        { type: 'transfer', account_id: 'usd', to_account_id: 'rut', amount: 93000, amount_native: 100 },
+      ])
+      expect(db.tables.transactions[0].to_amount_native).toBeUndefined()
+    })
+
+    test('sin el valor del día se escribe a mano y queda guardado', async ({ page }) => {
+      db.indicators = 'fail'
+      await page.goto('/#/movimientos')
+      await page.getByRole('button', { name: 'Nueva transacción' }).first().click()
+      const dialog = page.getByRole('dialog', { name: 'Nueva transacción' })
+      await dialog.getByLabel('Cuenta').selectOption({ label: 'Cuenta USD' })
+      await dialog.getByLabel('Monto (US$)').fill('20,5')
+      await dialog.getByRole('button', { name: 'Comida' }).click()
+      await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+      await expect(dialog.getByText(/Ingresa el valor de 1 USD/).first()).toBeVisible()
+      await dialog.getByLabel(/Valor de 1 USD el/).fill('1000')
+      await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+      await expect(dialog).toBeHidden()
+      expect(db.tables.transactions).toMatchObject([{ amount: 20500, amount_native: 20.5 }])
+      await expect.poll(() => db.tables.exchange_rates?.length ?? 0).toBe(1)
+      expect(db.tables.exchange_rates[0]).toMatchObject({ currency: 'USD', clp: 1000 })
+    })
+  })
+})

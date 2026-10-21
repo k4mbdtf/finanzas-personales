@@ -36,6 +36,7 @@ supabase/migrations/
   0006_deudas_inversiones.sql   Deudas fuera de Cuentas, banco de cada cuenta, inversiones
   0007_reglas.sql               Reglas de categorización (texto → categoría)
   0008_dividir.sql              Dividir un movimiento en varias categorías (split_group + save_split)
+  0009_multimoneda.sql          Cuentas en UF o dólares (opcional): montos en su moneda y valores del día
 supabase/tests/          Pruebas SQL de las migraciones (PostgreSQL local con Docker)
 e2e/                     Pruebas de punta a punta (Playwright) con Supabase simulado (fake-supabase.ts)
 supabase/email-templates/ Correos de confirmación y recuperación en español
@@ -57,7 +58,7 @@ src/
                          csv (cartolas), recurring (fechas), debt, goals, accounts (tipos de
                          cuenta), institutions (bancos), investments, upcoming (próximos pagos),
                          yearSummary (resumen anual), rules (reglas de categorización),
-                         split (dividir movimientos)
+                         split (dividir movimientos), currency (UF y dólares)
                          (+ *.test.ts)
   hooks/useQuery.ts      Carga de datos + recarga cuando cambia un tópico
   data/                  Única capa que habla con Supabase (accounts, categories, transactions,
@@ -114,6 +115,7 @@ auth.users (Supabase)
   └─ installment_plans               compra en cuotas; sus cuotas son transactions
   └─ import_batches                  cada cartola importada (para deshacer)
   └─ category_rules                  "si contiene <texto>, usa <categoría>" (0007)
+  └─ exchange_rates                  valor de la UF y el dólar por día (0009)
 views: account_balances (saldo, entradas y salidas por cuenta), goal_progress (avance de metas),
        investment_status (aportado, rescatado y valor actual) — todas security_invoker
 ```
@@ -239,7 +241,26 @@ diferencia con el año anterior. Lógica en `src/lib/yearSummary.ts` (+ pruebas)
 **Patrimonio** (`/#/patrimonio`, línea de 12 o 24 meses con vista de tabla). En el celular están en
 **Más** (barra inferior); en escritorio, en la barra lateral.
 
-**Ajustes** (`/#/ajustes`): tema (Sistema / Claro / Oscuro), instalar la app, **exportar mis datos**
+**UF y dólares** (opcional, requiere la migración 0009; se activa en Ajustes → "Usar UF y dólares").
+Apagada, la app se ve igual que siempre, solo en pesos. Activada:
+- Al crear una cuenta de dinero (efectivo, banco, ahorro o tarjeta) se elige su moneda: pesos, UF o
+  dólares. Su saldo y sus movimientos se muestran en esa moneda, con el equivalente en pesos de hoy.
+- En **Cuentas**, "Ver saldos en" muestra los saldos y el total en pesos, UF o dólares.
+- Un gasto o ingreso en una cuenta en UF/USD se escribe en su moneda y se guarda también en pesos al
+  valor de ese día (`amount`), así presupuestos, reportes y el resumen anual siguen en pesos. En una
+  transferencia entre monedas se escribe lo que sale y lo que llega (precompletado con el valor del
+  día y editable, para que cuadre con lo que dice el banco).
+- Los valores de la UF y el dólar (observado) vienen de [mindicador.cl](https://mindicador.cl) y se
+  guardan en `exchange_rates`. Si no se pueden obtener (sin conexión, o si el navegador bloquea la
+  consulta), el formulario pide el valor y también se guarda. Siempre se puede corregir ("Cambiar").
+- La moneda de una cuenta no cambia después de crearla. Por ahora los recurrentes, las compras en
+  cuotas, las cartolas importadas, las metas y los movimientos iniciales de deudas e inversiones son
+  solo en cuentas en pesos (la BD lo valida), y las deudas e inversiones son en pesos.
+- El saldo de hoy de una cuenta en UF/USD (en Inicio, Cuentas y Deudas) usa el valor de hoy; el
+  patrimonio histórico la cuenta con los pesos de cada movimiento.
+- Diseño en `supabase/migrations/0009_multimoneda.sql` y lógica en `src/lib/currency.ts` (+ pruebas).
+
+**Ajustes** (`/#/ajustes`): tema (Sistema / Claro / Oscuro), UF y dólares, instalar la app, **exportar mis datos**
 (movimientos en CSV con `;` y UTF-8 para Excel, o respaldo completo en JSON), cambiar contraseña,
 eliminar la cuenta y todos los datos, y enlace a Privacidad.
 

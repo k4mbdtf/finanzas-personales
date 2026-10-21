@@ -8,6 +8,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { CalendarClock, Trash2, TriangleAlert } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { isTrackedType } from '@/lib/accounts'
 import { parseTags } from '@/data/transactions'
 import { createRule, deleteRule, materializeRecurring, updateRule } from '@/data/recurring'
@@ -28,7 +29,8 @@ export function RecurringForm({ rule, onDone }: { rule?: RecurringRule; onDone: 
   const confirm = useConfirm()
   const toast = useToast()
   // Solo cuentas de dinero (en edición, también la original aunque esté archivada).
-  const usable = accounts.filter((a) => !a.archived || a.id === rule?.account_id || a.id === rule?.to_account_id)
+  // Solo cuentas en pesos: los recurrentes generan movimientos sin monto en otra moneda.
+  const usable = accounts.filter((a) => inPesos(a) && (!a.archived || a.id === rule?.account_id || a.id === rule?.to_account_id))
   const firstAccount = usable.find((a) => !a.archived)?.id ?? ''
   // Deudas por pagar e inversiones como destino de una transferencia mensual.
   const payable = debts.filter((a) => a.type === 'loan' && (!a.archived || a.id === rule?.to_account_id))

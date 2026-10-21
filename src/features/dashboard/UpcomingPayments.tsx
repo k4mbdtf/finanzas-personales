@@ -8,6 +8,7 @@ import { useRefData } from '@/context/RefData'
 import { listPlans } from '@/data/installments'
 import { listRules } from '@/data/recurring'
 import { useQuery } from '@/hooks/useQuery'
+import { balanceCLP, currencyOf, nativeBalance } from '@/lib/currency'
 import { formatCLP, formatDate, todayISO } from '@/lib/format'
 import { dueLabel, upcomingPayments, type Upcoming, type UpcomingKind } from '@/lib/upcoming'
 import { IconTile } from '@/components/icons'
@@ -23,7 +24,7 @@ const ICONS: Record<UpcomingKind, LucideIcon> = {
 }
 
 export function UpcomingPayments() {
-  const { accounts, debts, accountById, categoryById } = useRefData()
+  const { accounts, debts, accountById, categoryById, rates } = useRefData()
   const { openNew } = useTransactionDrawer()
   const { pay } = useDebtActions()
   const [all, setAll] = useState(false)
@@ -33,7 +34,8 @@ export function UpcomingPayments() {
   const [rules, plans] = q.data
   const today = todayISO()
   const items = upcomingPayments({
-    today, days: DAYS, accounts: [...accounts, ...debts], rules, plans,
+    // Tarjetas en UF/USD: su deuda en pesos de hoy.
+    today, days: DAYS, accounts: [...accounts, ...debts].map((a) => ({ ...a, balance: balanceCLP(a, rates) })), rules, plans,
     ruleTitle: (r) => {
       const rule = rules.find((x) => x.id === r.id)
       const cat = rule?.category_id ? categoryById.get(rule.category_id)?.name : undefined
@@ -50,7 +52,11 @@ export function UpcomingPayments() {
     const a = u.accountId ? accountById.get(u.accountId) : undefined
     if (!a) return
     if (u.kind === 'loan') pay(a)
-    else openNew({ type: 'transfer', to_account_id: a.id, amount: u.amount ?? undefined, note: `Pago ${a.name}` }, 'Pagar tarjeta')
+    else openNew({
+      type: 'transfer', to_account_id: a.id, note: `Pago ${a.name}`,
+      // Tarjeta en UF/USD: se precompleta la deuda en su moneda.
+      ...(currencyOf(a) === 'CLP' ? { amount: u.amount ?? undefined } : { to_amount_native: Math.max(0, -nativeBalance(a)) || undefined }),
+    }, 'Pagar tarjeta')
   }
 
   return (

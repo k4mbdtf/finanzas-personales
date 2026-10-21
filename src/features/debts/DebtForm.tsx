@@ -9,6 +9,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { useRefData } from '@/context/RefData'
+import { inPesos } from '@/lib/currency'
 import { createTrackedAccount, deleteAccount, updateAccount } from '@/data/accounts'
 import { debtOf, remainingFromInstallments } from '@/lib/debt'
 import { AppError } from '@/lib/errors'
@@ -67,7 +68,8 @@ export function DebtForm({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const usable = accounts.filter((a) => !a.archived)
+  // El movimiento inicial es en pesos.
+  const usable = accounts.filter((a) => !a.archived && inPesos(a))
   const institution = isLoan ? findInstitution(counterparty) : undefined
   const count = Number(countText)
   const paidBefore = Number(paidBeforeText || 0)
