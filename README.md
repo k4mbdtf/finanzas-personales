@@ -283,7 +283,9 @@ base de datos (`monthly_totals`, `spending_by_category`) y las transferencias no
 
 ## Diseño
 
-Estilo suizo minimalista con detalles inspirados en Apple. Todo vive en `src/index.css`
+Estilo suizo minimalista con detalles inspirados en Apple. El sistema completo (tokens, componentes,
+anatomía del dashboard y patrones reutilizables en otros proyectos) está en [`DESIGN.md`](DESIGN.md).
+Todo vive en `src/index.css`
 (variables CSS + `@theme` de Tailwind), así que cambiar un color es cambiar una línea.
 
 - **Colores:** fondo beige `#F5F1E8` con tarjetas blancas; tinta y botón principal carbón `#1C1C1C`
